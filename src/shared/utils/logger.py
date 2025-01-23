@@ -1,45 +1,45 @@
-import sys
+import logging
+import os
 from pathlib import Path
-from loguru import logger
-
 from ..config.config import config
 
-def setup_logger():
-    # 清除默認的處理器
-    logger.remove()
-
-    # 獲取日誌配置
-    log_level = config.get('logging.level', 'INFO')
-    log_format = config.get('logging.format', "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
-    log_file = config.get('logging.file_path', 'logs/app.log')
-    rotation = config.get('logging.rotation', '500 MB')
-    retention = config.get('logging.retention', '10 days')
-
-    # 確保日誌目錄存在
-    log_path = Path(log_file).parent
-    log_path.mkdir(parents=True, exist_ok=True)
-
-    # 添加控制台輸出
-    logger.add(
-        sys.stdout,
-        format=log_format,
-        level=log_level,
-        colorize=True
+def setup_logger(name: str) -> logging.Logger:
+    """設置日誌記錄器"""
+    logger = logging.getLogger(name)
+    
+    # 如果已經有處理器，直接返回
+    if logger.handlers:
+        return logger
+    
+    # 強制設置日誌級別
+    logger.setLevel(logging.DEBUG)
+    
+    # 創建格式化器
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-
-    # 添加文件輸出
-    logger.add(
-        log_file,
-        format=log_format,
-        level=log_level,
-        rotation=rotation,
-        retention=retention
-    )
-
+    
+    # 添加控制台處理器
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    # 添加文件處理器
+    if hasattr(config.settings, 'log_file') and config.settings.log_file:
+        try:
+            file_handler = logging.FileHandler(
+                config.settings.log_file,
+                encoding='utf-8'
+            )
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        except Exception as e:
+            logger.error(f"無法創建日誌文件處理器: {str(e)}")
+    
     return logger
 
-# 初始化日誌
-logger = setup_logger()
+# 創建全局日誌記錄器
+logger = setup_logger('line_ai')
 
-# 導出 logger
-__all__ = ['logger'] 
+# 導出 logger 實例
+__all__ = ["logger"] 

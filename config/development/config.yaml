@@ -1,5 +1,6 @@
 app:
   name: "LINE AI Assistant"
+  environment: "development"
   version: "1.0.0"
   debug: true
 
@@ -16,3 +17,19 @@ logging:
 
 database:
   url: "postgresql://user:password@localhost:5432/line_ai_db"
+
+ai:
+  default_model: "gemini"
+  models:
+    gemini:
+      model_name: "gemini-pro"
+      temperature: 0.7
+      max_tokens: 1000
+    openai:
+      model_name: "gpt-4"
+      temperature: 0.7
+      max_tokens: 1000
+    claude:
+      model_name: "claude-3"
+      temperature: 0.7
+      max_tokens: 1000

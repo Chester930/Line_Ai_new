@@ -172,4 +172,24 @@ deactivate
   pip freeze > requirements.txt
   ```
 
+## API 密鑰需求
+
+本系統支援多個 AI 模型，需要以下 API 密鑰：
+
+1. Google Gemini API
+   - 獲取地址：https://makersuite.google.com/app/apikey
+   - 環境變量：GOOGLE_API_KEY
+
+2. OpenAI API（待實現）
+   - 獲取地址：https://platform.openai.com/api-keys
+   - 環境變量：OPENAI_API_KEY
+   - 所需權限：GPT-4 訪問權限
+
+3. Anthropic Claude API（待實現）
+   - 獲取地址：https://console.anthropic.com/
+   - 環境變量：ANTHROPIC_API_KEY
+   - 所需模型：Claude 3
+
+注意：目前系統已完成 Gemini 模型整合，OpenAI 和 Claude 模型將在取得 API 密鑰後進行測試和調整。
+
 
