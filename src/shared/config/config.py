@@ -5,7 +5,7 @@ from typing import Any, Dict
 import yaml
 from dotenv import load_dotenv
 
-class ConfigManager:
+class Config:
     _instance = None
     _config: Dict[str, Any] = {}
 
@@ -15,47 +15,33 @@ class ConfigManager:
             cls._instance._load_config()
         return cls._instance
 
-    def _load_config(self) -> None:
-        # Load environment variables
+    def _load_config(self):
+        # 加載 .env 文件
         load_dotenv()
-        
-        # Get config path from environment
+
+        # 從環境變數獲取配置文件路徑
         config_path = os.getenv('CONFIG_PATH', 'config/development/config.yaml')
         
-        # Load YAML config
-        config_file = Path(config_path)
-        if config_file.exists():
-            with open(config_file, 'r', encoding='utf-8') as f:
-                self._config = yaml.safe_load(f)
-        
-        # Override with environment variables
+        # 讀取 YAML 配置
+        with open(config_path, 'r', encoding='utf-8') as f:
+            self._config = yaml.safe_load(f)
+
+        # 環境變數覆蓋
         self._override_from_env()
 
-    def _override_from_env(self) -> None:
-        """Override configuration values with environment variables."""
-        for key, value in os.environ.items():
-            # Convert environment variables to nested dictionary structure
-            current = self._config
-            parts = key.lower().split('_')
-            
-            for part in parts[:-1]:
-                if part not in current:
-                    current[part] = {}
-                current = current[part]
-            
-            current[parts[-1]] = value
+    def _override_from_env(self):
+        # 這裡可以添加環境變數覆蓋邏輯
+        pass
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Get configuration value by key."""
+        """獲取配置值"""
         try:
-            current = self._config
-            for part in key.split('.'):
-                current = current[part]
-            return current
+            keys = key.split('.')
+            value = self._config
+            for k in keys:
+                value = value[k]
+            return value
         except (KeyError, TypeError):
             return default
 
-    @property
-    def config(self) -> Dict[str, Any]:
-        """Get entire configuration dictionary."""
-        return self._config 
+config = Config() 

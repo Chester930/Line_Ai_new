@@ -66,10 +66,10 @@ alembic upgrade head
 6. 啟動服務
 ```bash
 # 開發模式
-python run.py --mode development
+uvicorn src.main:app --reload --port 8000
 
 # 生產模式
-python run.py --mode production
+uvicorn src.main:app --workers 4 --port 8000
 ```
 
 ## 專案結構
@@ -80,6 +80,8 @@ LINE_AI_New/
 │   ├── apps/          # 應用程序
 │   ├── core/          # 核心功能
 │   ├── shared/        # 共享模組
+│   │   ├── config/    # 配置管理
+│   │   └── utils/     # 工具函數
 │   └── interfaces/    # 介面定義
 ├── tests/             # 測試文件
 ├── docs/              # 文檔
@@ -123,10 +125,51 @@ pytest --cov=src
 
 MIT License
 
-Windows:
+## 虛擬環境設置
+
+本專案使用 Python 虛擬環境來管理依賴，請按照以下步驟設置：
+
+### Windows 環境：
 ```bash
 # 建立虛擬環境
 python -m venv venv
 
 # 啟動虛擬環境
 venv\Scripts\activate
+
+# 安裝依賴
+pip install -r requirements.txt
+
+# 安裝開發依賴（可選）
+pip install pytest pytest-cov
+```
+
+### Linux/Mac 環境：
+```bash
+# 建立虛擬環境
+python -m venv venv
+
+# 啟動虛擬環境
+source venv/bin/activate
+
+# 安裝依賴
+pip install -r requirements.txt
+
+# 安裝開發依賴（可選）
+pip install pytest pytest-cov
+```
+
+### 退出虛擬環境
+```bash
+deactivate
+```
+
+注意：
+- 所有的開發和測試都應在虛擬環境中進行
+- 每次開啟新的終端機都需要重新啟動虛擬環境
+- 安裝新的依賴後，請更新 requirements.txt：
+  ```bash
+  pip freeze > requirements.txt
+  ```
+
+

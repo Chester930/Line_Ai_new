@@ -1,50 +1,45 @@
 import sys
 from pathlib import Path
-from typing import Optional
-
 from loguru import logger
 
-class LoggerManager:
-    _instance = None
+from ..config.config import config
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._configure_logger()
-        return cls._instance
+def setup_logger():
+    # 清除默認的處理器
+    logger.remove()
 
-    def _configure_logger(self):
-        # Remove default handler
-        logger.remove()
+    # 獲取日誌配置
+    log_level = config.get('logging.level', 'INFO')
+    log_format = config.get('logging.format', "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
+    log_file = config.get('logging.file_path', 'logs/app.log')
+    rotation = config.get('logging.rotation', '500 MB')
+    retention = config.get('logging.retention', '10 days')
 
-        # Get configurations from environment
-        log_level = os.getenv('LOG_LEVEL', 'INFO')
-        log_path = os.getenv('LOG_PATH', 'logs')
-        log_rotation = os.getenv('LOG_ROTATION', '500 MB')
-        log_retention = os.getenv('LOG_RETENTION', '10 days')
+    # 確保日誌目錄存在
+    log_path = Path(log_file).parent
+    log_path.mkdir(parents=True, exist_ok=True)
 
-        # Create logs directory if it doesn't exist
-        Path(log_path).mkdir(parents=True, exist_ok=True)
+    # 添加控制台輸出
+    logger.add(
+        sys.stdout,
+        format=log_format,
+        level=log_level,
+        colorize=True
+    )
 
-        # Add console handler
-        logger.add(
-            sys.stdout,
-            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-            level=log_level,
-            colorize=True
-        )
+    # 添加文件輸出
+    logger.add(
+        log_file,
+        format=log_format,
+        level=log_level,
+        rotation=rotation,
+        retention=retention
+    )
 
-        # Add file handler
-        logger.add(
-            f"{log_path}/app.log",
-            rotation=log_rotation,
-            retention=log_retention,
-            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-            level=log_level,
-            encoding='utf-8'
-        )
+    return logger
 
-    @staticmethod
-    def get_logger(name: Optional[str] = None):
-        """Get a logger instance with an optional name."""
-        return logger.bind(name=name or "default") 
+# 初始化日誌
+logger = setup_logger()
+
+# 導出 logger
+__all__ = ['logger'] 
