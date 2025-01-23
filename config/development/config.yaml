@@ -1,0 +1,18 @@
+app:
+  name: LINE_AI_New
+  version: '1.0.0'
+
+server:
+  host: '0.0.0.0'
+  port: 8000
+
+logging:
+  level: 'DEBUG'
+  format: '{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}'
+
+database:
+  host: 'localhost'
+  port: 5432
+  name: 'line_ai_db'
+  user: 'user'
+  password: 'password'
