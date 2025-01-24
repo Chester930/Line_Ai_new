@@ -1,0 +1,22 @@
+{
+  "openai": {
+    "api_key": "",
+    "model": "gpt-3.5-turbo",
+    "temperature": 0.7,
+    "max_tokens": 1000
+  },
+  "google": {
+    "api_key": "",
+    "model": "gemini-pro"
+  },
+  "anthropic": {
+    "api_key": "",
+    "model": "claude-3-sonnet"
+  },
+  "default_provider": "openai",
+  "prompts": {
+    "system": "你是一個友善的 AI 助手，會用中文回答問題。",
+    "context_window": 10,
+    "max_conversation_age": 3600
+  }
+} 

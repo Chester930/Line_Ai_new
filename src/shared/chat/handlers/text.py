@@ -1,42 +1,61 @@
-from typing import Optional
+from typing import Dict, Any
+from .base import BaseMessageHandler
+from ..session import Message
+from ...ai.factory import AIModelFactory, ModelType
 from ...utils.logger import logger
-from ..session import session_manager
 
-async def handle_text_message(user_id: str, message: str) -> str:
-    """處理文字消息"""
-    try:
-        # 獲取用戶會話
-        session = session_manager.get_session(user_id)
-        
-        # 檢查是否是命令
-        if message.startswith('/'):
-            return await handle_command(session, message)
-        
-        # 生成回應
-        response = await session.send_message(message)
-        return response
-        
-    except Exception as e:
-        logger.error(f"處理文字消息時發生錯誤: {str(e)}")
-        return "抱歉，處理您的消息時發生錯誤。"
-
-async def handle_command(session, command: str) -> str:
-    """處理命令"""
-    cmd_parts = command[1:].split()
-    cmd = cmd_parts[0].lower()
+class TextMessageHandler(BaseMessageHandler):
+    """文本消息處理器"""
     
-    if cmd == 'clear':
-        session.clear_context()
-        return "已清空對話記錄。"
-        
-    elif cmd == 'switch':
-        if len(cmd_parts) < 2:
-            return "請指定要切換的模型類型。"
-        
-        model_type = cmd_parts[1].lower()
-        if session.switch_model(model_type):
-            return f"已切換至 {model_type} 模型。"
-        else:
-            return "切換模型失敗，請確認模型類型是否正確。"
+    def __init__(self):
+        super().__init__()
+        self.supported_types = ["text"]
     
-    return f"未知的命令: {cmd}" 
+    async def validate(self, message: Message) -> bool:
+        """驗證文本消息"""
+        return (
+            message.type == "text" and
+            isinstance(message.content, str) and
+            len(message.content.strip()) > 0
+        )
+    
+    async def preprocess(self, message: Message) -> Message:
+        """預處理文本消息"""
+        # 清理文本
+        message.content = message.content.strip()
+        return message
+    
+    async def handle(self, message: Message) -> Dict[str, Any]:
+        """處理文本消息"""
+        try:
+            if not await self.validate(message):
+                raise ValueError("無效的文本消息")
+            
+            # 預處理
+            message = await self.preprocess(message)
+            
+            # 創建 AI 模型
+            model = await AIModelFactory.create(ModelType.GEMINI)
+            
+            # 生成響應
+            response = await model.generate(message.content)
+            
+            # 後處理響應
+            result = {
+                "success": True,
+                "response": response.text,
+                "model": response.model.value,
+                "tokens": response.tokens
+            }
+            
+            return await self.postprocess(result)
+            
+        except Exception as e:
+            return await self.handle_error(e)
+    
+    async def postprocess(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """後處理結果"""
+        if result.get("success"):
+            # 添加額外的處理邏輯，例如過濾敏感詞等
+            result["processed"] = True
+        return result 

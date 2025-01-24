@@ -1,56 +1,60 @@
-from contextlib import asynccontextmanager
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.shared.config.config import config
-from src.shared.database.base import db
-from src.shared.utils.logger import logger
-from src.apps.webhook.routes import router as webhook_router
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """應用程序生命週期事件處理"""
-    # 啟動時執行
-    logger.info("應用程序啟動中...")
-    try:
-        # 初始化數據庫
-        db.create_tables()
-        logger.info("數據庫表創建成功")
-        
-        yield  # 應用程序運行
-        
-    finally:
-        # 關閉時執行
-        logger.info("應用程序關閉中...")
+from .line.router import router as line_router
+from .shared.config.manager import config_manager
+from .shared.utils.logger import logger
 
 def create_app() -> FastAPI:
-    """創建 FastAPI 應用程序"""
+    """創建 FastAPI 應用"""
+    # 載入配置
+    app_config = config_manager.get_app_config()
+    
+    # 創建應用
     app = FastAPI(
-        title=config.settings.app_name,
-        lifespan=lifespan
+        title="AI Chat Bot",
+        description="LINE AI 聊天機器人",
+        version="1.0.0"
     )
-
+    
     # 配置 CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=app_config.get("cors.origins", ["*"]),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
+    
     # 註冊路由
-    app.include_router(webhook_router)
+    app.include_router(
+        line_router,
+        prefix="/line",
+        tags=["line"]
+    )
+    
+    # 啟動事件
+    @app.on_event("startup")
+    async def startup():
+        logger.info("應用程式啟動")
+    
+    # 關閉事件
+    @app.on_event("shutdown")
+    async def shutdown():
+        logger.info("應用程式關閉")
     
     return app
 
-# 創建應用程序實例
 app = create_app()
 
 if __name__ == "__main__":
-    import uvicorn
+    # 載入配置
+    app_config = config_manager.get_app_config()
+    
+    # 啟動服務器
     uvicorn.run(
         "main:app",
-        host=config.settings.app_host,
-        port=config.settings.app_port,
-        reload=config.settings.debug
+        host=app_config.get("host", "0.0.0.0"),
+        port=app_config.get("port", 8000),
+        reload=app_config.get("debug", False)
     ) 

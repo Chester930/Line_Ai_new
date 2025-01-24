@@ -1,6 +1,10 @@
 import os
 import pytest
 from src.shared.config.config import Config, Settings
+from pathlib import Path
+from src.shared.config.manager import ConfigManager
+from src.shared.config.validator import ConfigValidator
+from src.shared.config.json_config import JSONConfig
 
 @pytest.fixture
 def test_config():
@@ -83,3 +87,129 @@ def test_config_reload(test_config):
     assert test_config.get('line.channel_secret') == 'new_secret'
     # 恢復原始值
     os.environ['LINE_CHANNEL_SECRET'] = original_secret 
+
+@pytest.fixture
+def test_settings():
+    """測試設置"""
+    return Settings(
+        GOOGLE_API_KEY="test_key",
+        LINE_CHANNEL_SECRET="test_secret",
+        LINE_CHANNEL_ACCESS_TOKEN="test_token",
+        DEBUG=True
+    )
+
+@pytest.fixture
+def config_manager(test_settings):
+    """測試配置管理器"""
+    return ConfigManager()
+
+def test_settings_validation(test_settings):
+    """測試設置驗證"""
+    validator = ConfigValidator(settings=test_settings)
+    result = validator.validate_all()
+    assert "success" in result
+
+def test_model_config(config_manager):
+    """測試模型配置"""
+    config = config_manager.get_model_config("gemini")
+    assert "api_key" in config
+    assert "timeout" in config
+    assert "max_retries" in config
+
+def test_directory_creation(config_manager):
+    """測試目錄創建"""
+    assert config_manager.settings.LOG_DIR.exists()
+    assert (config_manager.settings.BASE_DIR / "data").exists()
+    assert (config_manager.settings.BASE_DIR / "temp").exists()
+
+def test_config_update(config_manager):
+    """測試配置更新"""
+    config_manager.update_setting("DEBUG", False)
+    assert not config_manager.debug_mode
+
+def test_invalid_config_update(config_manager):
+    """測試無效配置更新"""
+    with pytest.raises(ValueError):
+        config_manager.update_setting("INVALID_KEY", "value")
+
+def test_env_template_generation(config_manager):
+    """測試環境變量模板生成"""
+    template = config_manager.get_env_file_template()
+    assert "GOOGLE_API_KEY" in template
+    assert "LINE_CHANNEL_SECRET" in template 
+
+@pytest.fixture
+def temp_config_file(tmp_path):
+    """臨時配置文件"""
+    return tmp_path / "test_config.json"
+
+@pytest.fixture
+def json_config(temp_config_file):
+    """JSON 配置"""
+    return JSONConfig(temp_config_file)
+
+@pytest.fixture
+def config_manager(tmp_path):
+    """配置管理器"""
+    return ConfigManager(tmp_path)
+
+def test_config_basic_operations(json_config):
+    """測試基本配置操作"""
+    # 設置值
+    assert json_config.set("test_key", "test_value")
+    assert json_config.get("test_key") == "test_value"
+    
+    # 設置嵌套值
+    assert json_config.set("nested.key", "nested_value")
+    assert json_config.get("nested.key") == "nested_value"
+    
+    # 獲取默認值
+    assert json_config.get("non_existent", "default") == "default"
+    
+    # 更新配置
+    assert json_config.update({"new_key": "new_value"})
+    assert json_config.get("new_key") == "new_value"
+
+def test_config_save_load(json_config):
+    """測試配置保存和載入"""
+    # 設置並保存
+    json_config.set("test_key", "test_value")
+    assert json_config.save()
+    
+    # 創建新實例載入
+    new_config = JSONConfig(json_config.config_path)
+    assert new_config.get("test_key") == "test_value"
+
+def test_config_manager(config_manager):
+    """測試配置管理器"""
+    # 獲取不同配置
+    ai_config = config_manager.get_ai_config()
+    app_config = config_manager.get_app_config()
+    
+    # 設置配置值
+    ai_config.set("openai.api_key", "test_key")
+    app_config.set("debug", True)
+    
+    # 保存所有配置
+    assert config_manager.save_all()
+    
+    # 重新載入配置
+    config_manager.reload_all()
+    
+    # 驗證值保持不變
+    ai_config = config_manager.get_ai_config()
+    app_config = config_manager.get_app_config()
+    assert ai_config.get("openai.api_key") == "test_key"
+    assert app_config.get("debug") is True
+
+def test_config_file_creation(tmp_path):
+    """測試配置文件創建"""
+    config_path = tmp_path / "new_config.json"
+    config = JSONConfig(config_path)
+    
+    # 確認文件被創建
+    assert config_path.exists()
+    
+    # 確認是有效的 JSON
+    content = config_path.read_text()
+    assert content == "{}" 

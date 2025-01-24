@@ -1,66 +1,122 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from ..utils.logger import logger
+from dataclasses import dataclass
+from enum import Enum
+from ..session.base import Message
+
+class ModelType(Enum):
+    """AI 模型類型"""
+    GEMINI = "gemini"
+    GPT = "gpt"
+    CLAUDE = "claude"
+
+@dataclass
+class AIResponse:
+    """AI 回應"""
+    content: str
+    model: str
+    usage: Optional[Dict[str, int]] = None
+    raw_response: Optional[Any] = None
+
+@dataclass
+class ModelResponse:
+    """模型響應"""
+    content: str
+    role: str = "assistant"
+    model: str = "unknown"
+    usage: Optional[Dict[str, int]] = None
+    raw_response: Optional[Any] = None
 
 class BaseAIModel(ABC):
     """AI 模型基類"""
-    def __init__(self):
-        """初始化模型"""
-        self.temperature: float = 0.7
-        self.max_tokens: int = 1000
-        self.top_p: float = 0.9
-        if not hasattr(self, 'model_type'):
-            raise ValueError("子類必須在調用 super().__init__() 之前設置 model_type")
-        self._initialize()
+    
+    def __init__(self, api_key: str, **kwargs):
+        self.api_key = api_key
+        self.config = kwargs
+        self.model_name = "unknown"
     
     @abstractmethod
-    def _initialize(self) -> None:
-        """初始化模型（由子類實現）"""
+    async def generate(
+        self,
+        messages: List[Message],
+        **kwargs
+    ) -> AIResponse:
+        """生成回應"""
         pass
     
     @abstractmethod
-    def generate_response(self, messages: List[Dict[str, str]]) -> str:
-        """生成回應（由子類實現）"""
+    async def validate(self) -> bool:
+        """驗證模型配置"""
         pass
     
-    def validate_response(self, response: str) -> bool:
-        """驗證回應"""
-        if not response or not isinstance(response, str):
-            return False
-        return True
-    
-    def format_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    def _format_messages(
+        self,
+        messages: List[Message]
+    ) -> List[Dict[str, str]]:
         """格式化消息"""
-        formatted = []
-        for msg in messages:
-            if all(key in msg for key in ["role", "content"]):
-                formatted.append({
-                    "role": msg["role"],
-                    "content": msg["content"]
-                })
-        return formatted
+        return [
+            {
+                "role": msg.role,
+                "content": msg.content
+            }
+            for msg in messages
+        ]
     
-    def handle_error(self, error: Exception) -> str:
+    def _handle_error(self, error: Exception, context: str = ""):
         """處理錯誤"""
-        error_message = f"模型錯誤: {str(error)}"
-        logger.error(error_message)
-        return "抱歉，處理您的請求時出現錯誤。請稍後再試。"
+        error_msg = f"{context} 失敗: {str(error)}"
+        logger.error(f"{self.model_name} - {error_msg}")
+        raise AIModelError(error_msg)
+
+class AIModelError(Exception):
+    """AI 模型錯誤"""
+    pass
+
+class BaseModel(ABC):
+    """AI 模型基類"""
     
-    @property
-    def model_info(self) -> Dict[str, Any]:
-        """獲取模型信息"""
-        return {
-            "type": self.model_type,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "top_p": self.top_p
-        }
+    def __init__(self, api_key: str, **kwargs):
+        self.api_key = api_key
+        self.config = kwargs
     
-    def update_settings(self, settings: Dict[str, Any]) -> None:
-        """更新模型設置"""
-        if "temperature" in settings:
-            self.temperature = float(settings["temperature"])
-        if "max_tokens" in settings:
-            self.max_tokens = int(settings["max_tokens"])
-        if "top_p" in settings:
-            self.top_p = float(settings["top_p"]) 
+    @abstractmethod
+    async def generate(
+        self,
+        messages: List[Message],
+        **kwargs
+    ) -> ModelResponse:
+        """生成回應"""
+        pass
+    
+    @abstractmethod
+    async def generate_stream(
+        self,
+        messages: List[Message],
+        **kwargs
+    ):
+        """流式生成回應"""
+        pass
+    
+    @abstractmethod
+    async def count_tokens(self, text: str) -> int:
+        """計算 token 數量"""
+        pass
+    
+    @abstractmethod
+    async def validate(self) -> bool:
+        """驗證模型配置"""
+        pass
+    
+    def _format_messages(
+        self,
+        messages: List[Message]
+    ) -> List[Dict[str, str]]:
+        """格式化消息"""
+        return [
+            {
+                "role": msg.role,
+                "content": msg.content
+            }
+            for msg in messages
+        ] 

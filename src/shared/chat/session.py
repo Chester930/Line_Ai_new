@@ -1,51 +1,83 @@
-from typing import Dict, Optional, Any
+from typing import Dict, List, Optional
 from datetime import datetime
-from .context import Context, ContextManager
-from ..ai.factory import ModelFactory
+from dataclasses import dataclass, field
+from ..ai.base import AIResponse
+from ..ai.factory import AIModelFactory, ModelType
 from ..utils.logger import logger
 
+@dataclass
+class Message:
+    """消息數據類"""
+    content: str
+    role: str
+    timestamp: datetime = field(default_factory=datetime.now)
+    type: str = "text"
+    media_url: Optional[str] = None
+
+@dataclass
+class Context:
+    """對話上下文"""
+    messages: List[Message] = field(default_factory=list)
+    metadata: Dict = field(default_factory=dict)
+    
+    def add_message(self, message: Message):
+        """添加消息到上下文"""
+        self.messages.append(message)
+    
+    def get_recent_messages(self, limit: int = 5) -> List[Message]:
+        """獲取最近的消息"""
+        return self.messages[-limit:] if self.messages else []
+
 class ChatSession:
-    """聊天會話"""
+    """對話會話管理"""
+    
     def __init__(self, user_id: str):
         self.user_id = user_id
-        self.current_model = 'gemini'
-        self.model_factory = ModelFactory()
-        self.context_manager = ContextManager()
-        self._initialize()
+        self.context = Context()
+        self.created_at = datetime.now()
+        self.last_active = datetime.now()
     
-    def _initialize(self):
-        """初始化會話"""
+    async def process_message(
+        self,
+        message: Message,
+        model_type: ModelType = None
+    ) -> AIResponse:
+        """處理用戶消息"""
         try:
-            self.model = self.model_factory.create_model(self.current_model)
-            self.context = self.context_manager.get_or_create_context(self.user_id)
-        except Exception as e:
-            logger.error(f"初始化會話失敗: {str(e)}")
-            raise
-    
-    def send_message(self, message: str) -> str:
-        """發送消息"""
-        try:
-            self.context.add_message("user", message)
-            response = self.model.generate_response(self.context.get_messages())
-            self.context.add_message("assistant", response)
+            # 更新活動時間
+            self.last_active = datetime.now()
+            
+            # 添加消息到上下文
+            self.context.add_message(message)
+            
+            # 創建 AI 模型
+            model_type = model_type or ModelType(config.settings.default_model)
+            model = await AIModelFactory.create(model_type)
+            
+            # 生成響應
+            response = await model.generate(
+                prompt=message.content,
+                context=[msg.__dict__ for msg in self.context.get_recent_messages()]
+            )
+            
+            # 添加響應到上下文
+            if response.text:
+                self.context.add_message(Message(
+                    content=response.text,
+                    role="assistant"
+                ))
+            
             return response
+            
         except Exception as e:
-            logger.error(f"發送消息失敗: {str(e)}")
+            logger.error(f"處理消息失敗: {str(e)}")
             raise
     
-    def switch_model(self, model_type: str) -> bool:
-        """切換模型"""
-        try:
-            self.model = self.model_factory.create_model(model_type)
-            self.current_model = model_type
-            return True
-        except Exception as e:
-            logger.error(f"切換模型失敗: {str(e)}")
-            return False
-    
-    def clear_context(self) -> None:
-        """清除上下文"""
-        self.context.clear()
+    def is_expired(self, timeout: int = None) -> bool:
+        """檢查會話是否過期"""
+        timeout = timeout or config.settings.session_timeout
+        delta = datetime.now() - self.last_active
+        return delta.seconds > timeout
 
 class SessionManager:
     """會話管理器"""

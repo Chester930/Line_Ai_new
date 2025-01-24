@@ -1,127 +1,142 @@
-# LINE AI Assistant (New Version)
+# AI 聊天機器人
 
-基於 LINE Messaging API 的新一代 AI 助手系統，整合多個 AI 模型，提供智能對話與多媒體處理功能。
+基於 LINE Messaging API 的智能對話系統。
 
-## 功能特點
+## 當前功能
 
-- 多模型 AI 對話系統
-  - OpenAI GPT
-  - Google Gemini
-  - Anthropic Claude
-- 進階對話管理
-  - 角色系統
-  - 上下文管理
-  - 多輪對話
-- 多媒體處理
-  - 圖片識別與生成
-  - 文件處理
-  - 語音轉文字
-- 管理後台
-  - 使用者管理
-  - 對話記錄
-  - 系統監控
-- 開發工具
-  - Studio 測試環境
-  - 性能分析
-  - 日誌追蹤
+### 已實現
+- AI 模型整合
+  - Gemini 模型支持
+  - 模型工廠模式
+  - 統一的錯誤處理
+- 提示詞系統
+  - 模板化管理
+  - 多角色支持（助手、專家）
+  - 動態提示詞生成
+- 對話管理
+  - 會話狀態追踪
+  - 上下文維護
+  - 記憶管理
+- 消息處理
+  - 文本消息支持
+  - 圖片分析能力
+  - 格式驗證
 
-## 系統要求
+### 開發中
+- 多模型支持
+  - GPT 模型整合
+  - Claude 模型整合
+- 增強的對話能力
+  - 情感分析
+  - 意圖識別
+  - 多輪對話優化
+- 知識庫整合
+  - 外部知識導入
+  - 動態學習能力
 
-- Python 3.8+
-- PostgreSQL 13+
-- Redis (選用，用於快取)
+### 規劃中
+- 進階功能
+  - 多語言支持
+  - 語音識別
+  - 自定義角色
+  - 群組對話支持
+- 系統優化
+  - 分布式部署
+  - 性能監控
+  - 數據分析
 
 ## 快速開始
 
-1. 克隆專案
-```bash
-git clone https://github.com/your-username/LINE_AI_New.git
-cd LINE_AI_New
-```
+1. 環境準備
 
-2. 設置虛擬環境
 ```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或
-venv\Scripts\activate     # Windows
-```
+# 複製環境變量模板
+cp .env.example .env
 
-3. 安裝依賴
-```bash
+# 編輯環境變量
+vim .env
+
+# 安裝依賴
 pip install -r requirements.txt
 ```
 
-4. 環境設定
+2. 啟動服務
+
 ```bash
-cp .env.example .env
-# 編輯 .env 文件，填入必要的設定
+# 開發環境
+uvicorn src.main:app --reload
+
+# 生產環境
+docker-compose -f deploy/docker-compose.yml up -d
 ```
 
-5. 初始化數據庫
-```bash
-alembic upgrade head
-```
-
-6. 啟動服務
-```bash
-# 開發模式
-uvicorn src.main:app --reload --port 8000
-
-# 生產模式
-uvicorn src.main:app --workers 4 --port 8000
-```
-
-## 專案結構
+## 項目結構
 
 ```
-LINE_AI_New/
-├── src/                # 源代碼
-│   ├── apps/          # 應用程序
-│   ├── core/          # 核心功能
-│   ├── shared/        # 共享模組
-│   │   ├── config/    # 配置管理
-│   │   └── utils/     # 工具函數
-│   └── interfaces/    # 介面定義
-├── tests/             # 測試文件
-├── docs/              # 文檔
-└── config/            # 配置文件
+src/
+├── shared/          # 共享模組
+│   ├── ai/          # AI 模型相關
+│   │   ├── base.py          # 模型基礎類
+│   │   ├── factory.py       # 模型工廠
+│   │   ├── models/          # 具體模型實現
+│   │   └── prompts/         # 提示詞系統
+│   ├── chat/        # 對話管理
+│   │   ├── session.py       # 會話管理
+│   │   ├── context.py       # 上下文管理
+│   │   ├── memory.py        # 記憶系統
+│   │   └── handlers/        # 消息處理器
+│   └── utils/       # 工具函數
+│       ├── logger.py        # 日誌工具
+│       └── config.py        # 配置管理
+├── line/            # LINE Bot 相關
+└── main.py          # 主程序
+
+tests/               # 測試文件
+├── unit/           # 單元測試
+└── integration/    # 集成測試
+
+deploy/              # 部署配置
+docs/                # 文檔
 ```
 
 ## 開發指南
 
-- 遵循 PEP 8 編碼規範
-- 使用 Black 進行代碼格式化
-- 撰寫單元測試
-- 提交前運行測試套件
+### 添加新模型
+1. 在 `src/shared/ai/models/` 創建新模型類
+2. 實現 `BaseAIModel` 接口
+3. 在 `ModelType` 中添加新類型
+4. 使用 `@AIModelFactory.register` 註冊
+
+### 添加新角色
+1. 在 `src/shared/ai/prompts/roles/` 創建新角色類
+2. 繼承 `BasePrompt`
+3. 實現 `build` 方法
+4. 定義角色特定的提示詞模板
+
+### 添加新處理器
+1. 在 `src/shared/chat/handlers/` 創建新處理器
+2. 繼承 `BaseMessageHandler`
+3. 實現必要的方法
+4. 在 `MessageHandlerManager` 中註冊
 
 ## 測試
 
-運行測試：
 ```bash
+# 運行所有測試
 pytest
-```
 
-檢查覆蓋率：
-```bash
-pytest --cov=src
+# 運行特定測試
+pytest tests/unit/ai/
+pytest tests/unit/chat/
 ```
 
 ## 文檔
 
-詳細文檔請參考 `docs/` 目錄：
-- [API 文檔](docs/api/README.md)
-- [開發指南](docs/development/README.md)
-- [部署指南](docs/deployment/README.md)
+- [API 文檔](docs/api.md)
+- [部署指南](docs/deployment.md)
+- [開發指南](docs/development.md)
 
-## 貢獻指南
-
-1. Fork 專案
-2. 創建特性分支
-3. 提交變更
-4. 發起 Pull Request
-
-## 授權
+## 授權協議
 
 MIT License
 

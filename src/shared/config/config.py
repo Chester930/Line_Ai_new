@@ -5,24 +5,48 @@ from typing import Any, Optional, Dict
 import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel
+from pydantic_settings import BaseSettings
+from functools import lru_cache
 
 # 配置基本日誌
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class Settings(BaseModel):
+class Settings(BaseSettings):
     """應用程序設置"""
-    app_name: str = "LINE AI Assistant Test"
-    debug: bool = True
-    line_channel_secret: str = "test_secret"
-    line_channel_access_token: str = "test_token"
-    database_url: str = "sqlite:///test.db"
-    database_echo: bool = False
-    google_api_key: str = "test_key"
-    # 添加日誌配置
+    # LINE 配置
+    line_channel_secret: str
+    line_channel_access_token: str
+    
+    # AI 模型配置
+    google_api_key: str
+    openai_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+    
+    # AI 模型設置
+    default_model: str = "gemini"
+    model_timeout: int = 30
+    max_retries: int = 3
+    
+    # 對話設置
+    context_limit: int = 2000
+    memory_limit: int = 500
+    session_timeout: int = 3600
+    
+    # 日誌配置
     log_level: str = "INFO"
-    log_format: str = "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s"
     log_file: Optional[str] = None
+
+    class Config:
+        env_file = ".env"
+
+@lru_cache()
+def get_settings() -> Settings:
+    """獲取設置單例"""
+    return Settings()
+
+# 創建全局配置實例
+config = type('Config', (), {'settings': get_settings()})()
 
 class Config:
     """配置管理器"""
