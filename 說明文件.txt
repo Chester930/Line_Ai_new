@@ -1,0 +1,715 @@
+# Line AI Assistant 專案說明文件
+
+```plaintext
+專案名稱：Line AI Assistant
+版本：1.0.0
+最後更新：2024-03-21
+```
+
+## 1. 專案概述
+
+### 1.1 專案目標
+建立一個整合多模型、知識庫和插件系統的智能助手平台，通過 LINE 介面提供服務，並具備完整的後台管理功能。
+
+### 1.2 核心特性
+- 多模型支援 (GPT、Claude、Gemini)
+- 知識庫管理與檢索
+- RAG/CAG 增強
+- 角色系統
+- 插件系統
+- 管理後台
+- 自動化測試
+
+## 2. 系統架構
+
+### 2.1 技術棧
+```plaintext
+後端框架：
+- FastAPI (API 服務)
+- Streamlit (管理介面)
+- SQLAlchemy (ORM)
+
+AI 模型整合：
+- OpenAI API
+- Anthropic API
+- Google AI API
+
+資料存儲：
+- SQLite (主資料庫)
+- FAISS (向量資料庫)
+
+開發工具：
+- pytest
+- black
+- flake8
+```
+
+### 2.2 系統模組
+```plaintext
+核心模組：
+├── AI 引擎層
+│   ├── 模型管理
+│   ├── RAG 系統
+│   └── CAG 系統
+├── 知識庫層
+│   ├── 文檔管理
+│   ├── 向量存儲
+│   └── 檢索系統
+├── 介面層
+│   ├── LINE Bot
+│   ├── REST API
+│   └── 管理後台
+└── 基礎設施層
+    ├── 資料庫
+    ├── 快取
+    └── 日誌
+```
+
+## 3. 專案狀態
+
+### 3.1 已完成功能
+
+#### 資料庫系統
+- [x] 完整的資料模型設計
+  - 用戶管理
+  - 對話系統
+  - 文檔管理
+  - 知識庫
+  - 角色系統
+- [x] CRUD 操作實現
+- [x] 資料庫遷移工具
+
+#### 文件處理系統
+- [x] 多格式支援
+  - PDF 文件
+  - Word 文件
+  - Excel 表格
+  - 純文本文件
+- [x] 內容提取與處理
+- [x] 文件分塊
+- [x] 文件雜湊
+- [x] 元數據管理
+
+#### RAG 系統
+- [x] 向量存儲實現
+- [x] 文檔檢索
+- [x] 批次處理
+- [x] JSON 格式轉換
+
+#### 測試框架
+- [x] 單元測試
+- [x] 整合測試
+- [x] API 測試
+- [x] 文檔測試
+
+### 3.2 進行中功能
+
+#### CAG 系統開發
+- [ ] 上下文管理
+- [ ] 記憶系統
+- [ ] 狀態追蹤
+- [ ] 對話流程優化
+
+#### 角色系統實現
+- [ ] 角色定義框架
+- [ ] 權限管理
+- [ ] 角色切換機制
+- [ ] 提示詞管理
+
+#### 插件系統
+- [ ] 插件框架
+- [ ] 插件管理介面
+- [ ] 標準插件開發
+  - 網頁搜索
+  - YouTube 字幕
+  - 網頁瀏覽
+
+### 3.3 待開發功能
+
+#### LINE Bot 整合
+- [ ] LINE 介面設計
+- [ ] 消息處理
+- [ ] 用戶管理
+- [ ] 多媒體支援
+
+#### 管理後台優化
+- [ ] 儀表板
+- [ ] 用戶分析
+- [ ] 系統監控
+- [ ] 日誌查看
+
+#### 系統優化
+- [ ] 性能優化
+- [ ] 快取系統
+- [ ] 錯誤處理
+- [ ] 安全性增強
+
+## 4. 開發指南
+
+### 4.1 環境設置
+```bash
+# 1. 克隆專案
+git clone [repository_url]
+
+# 2. 創建虛擬環境
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+
+# 3. 安裝依賴
+pip install -r requirements.txt
+
+# 4. 初始化資料庫
+python scripts/init_db.py
+```
+
+### 4.2 運行專案
+```bash
+# 啟動管理後台
+python run.py --mode admin
+
+# 啟動 LINE Bot
+python run.py --mode line
+```
+
+### 4.3 測試執行
+```bash
+# 運行所有測試
+pytest
+
+# 運行特定測試
+pytest tests/test_rag/
+pytest tests/test_api.py
+```
+
+## 5. 部署說明
+
+### 5.1 系統需求
+- Python 3.9+
+- SQLite 3
+- 足夠的磁盤空間用於向量存儲
+- AI API 密鑰配置
+
+### 5.2 配置文件
+需要配置以下環境變數：
+```plaintext
+LINE_CHANNEL_SECRET=xxx
+LINE_CHANNEL_ACCESS_TOKEN=xxx
+OPENAI_API_KEY=xxx
+ANTHROPIC_API_KEY=xxx
+GOOGLE_API_KEY=xxx
+```
+
+### 5.3 部署步驟
+1. 準備服務器環境
+2. 配置環境變數
+3. 安裝依賴
+4. 初始化資料庫
+5. 設置服務
+6. 啟動應用
+
+## 6. 維護計劃
+
+### 6.1 日常維護
+- 日誌檢查
+- 資料庫備份
+- 性能監控
+- 錯誤追蹤
+
+### 6.2 更新計劃
+- 功能更新
+- 安全更新
+- 依賴更新
+- 文檔更新
+
+## 7. 貢獻指南
+
+### 7.1 開發規範
+- 遵循 PEP 8 編碼規範
+- 使用類型提示
+- 編寫單元測試
+- 添加文檔字符串
+
+### 7.2 提交規範
+- 使用語義化版本號
+- 遵循約定式提交
+- 創建有意義的提交信息
+
+## 8. 技術實現細節
+
+### 8.1 RAG 系統實現
+```plaintext
+核心組件：
+├── Processor
+│   ├── DocumentProcessor：文檔處理
+│   ├── BatchProcessor：批量處理
+│   └── JsonConverter：格式轉換
+├── Vector
+│   ├── VectorStore：向量存儲
+│   └── Indexer：索引管理
+└── Retriever
+    ├── Searcher：檢索引擎
+    └── Ranker：相關性排序
+```
+
+#### 8.1.1 文檔處理流程
+1. 文件上傳
+   - 支援格式檢查
+   - 文件大小驗證
+   - 內容類型識別
+
+2. 內容提取
+   - PDF 文本提取
+   - Word 文檔解析
+   - Excel 數據處理
+   - 純文本處理
+
+3. 內容處理
+   - 文本清理
+   - 分段處理
+   - 元數據提取
+   - 內容雜湊計算
+
+4. 向量化處理
+   - 文本分塊
+   - 向量編碼
+   - 索引構建
+   - 向量存儲
+
+### 8.2 CAG 系統設計
+```plaintext
+系統組件：
+├── Context
+│   ├── ContextManager：上下文管理
+│   ├── MemoryPool：記憶池
+│   └── StateTracker：狀態追蹤
+├── Generation
+│   ├── PromptBuilder：提示詞構建
+│   ├── ResponseGenerator：回應生成
+│   └── OutputOptimizer：輸出優化
+└── Analysis
+    ├── IntentRecognizer：意圖識別
+    └── EmotionDetector：情緒檢測
+```
+
+#### 8.2.1 對話處理流程
+1. 輸入處理
+   - 消息解析
+   - 意圖識別
+   - 上下文加載
+
+2. 知識檢索
+   - 相關文檔檢索
+   - 歷史對話檢索
+   - 知識整合
+
+3. 回應生成
+   - 提示詞構建
+   - 模型調用
+   - 回應優化
+
+4. 狀態更新
+   - 對話歷史更新
+   - 上下文更新
+   - 記憶池管理
+
+### 8.3 資料庫架構
+```plaintext
+核心表結構：
+├── 用戶管理
+│   ├── users：用戶信息
+│   └── user_settings：用戶設置
+├── 對話系統
+│   ├── conversations：對話
+│   └── messages：消息
+├── 知識庫
+│   ├── knowledge_bases：知識庫
+│   ├── documents：文檔
+│   └── document_chunks：文檔分塊
+└── 系統管理
+    ├── roles：角色定義
+    └── plugins：插件配置
+```
+
+#### 8.3.1 資料關係
+- 用戶 -> 對話：一對多
+- 對話 -> 消息：一對多
+- 知識庫 -> 文檔：一對多
+- 文檔 -> 分塊：一對多
+- 用戶 -> 設置：一對一
+
+### 8.4 API 接口設計
+```plaintext
+主要接口：
+├── 用戶接口
+│   ├── /users/profile：用戶資料
+│   └── /users/settings：用戶設置
+├── 對話接口
+│   ├── /chat/send：發送消息
+│   └── /chat/history：對話歷史
+├── 知識庫接口
+│   ├── /kb/upload：上傳文檔
+│   └── /kb/search：檢索內容
+└── 系統接口
+    ├── /system/status：系統狀態
+    └── /system/logs：系統日誌
+```
+
+## 9. 開發路線圖
+
+### 9.1 第一階段：基礎建設
+- [x] 資料庫設計與實現
+- [x] 文件處理系統
+- [x] RAG 系統基礎實現
+- [x] 測試框架搭建
+
+### 9.2 第二階段：核心功能
+- [ ] CAG 系統開發
+- [ ] 角色系統實現
+- [ ] 插件系統開發
+- [ ] LINE Bot 整合
+
+### 9.3 第三階段：功能優化
+- [ ] 性能優化
+- [ ] 使用者體驗改進
+- [ ] 安全性強化
+- [ ] 監控系統建置
+
+### 9.4 第四階段：擴展功能
+- [ ] 多語言支援
+- [ ] 多平台整合
+- [ ] 進階分析功能
+- [ ] 自動化運維
+
+## 10. 性能指標
+
+### 10.1 響應時間
+- API 響應：< 200ms
+- 文件處理：< 5s
+- 對話生成：< 3s
+- 知識檢索：< 1s
+
+### 10.2 系統容量
+- 並發用戶：1000+
+- 文件大小：< 50MB
+- 知識庫容量：100GB
+- 對話歷史：30 天
+
+### 10.3 準確率
+- 檢索準確率：> 90%
+- 回應相關性：> 85%
+- 文件解析：> 95%
+- 意圖識別：> 90%
+
+## 11. 安全措施
+
+### 11.1 數據安全
+- 數據加密存儲
+- 定期數據備份
+- 訪問權限控制
+- 敏感信息過濾
+
+### 11.2 系統安全
+- API 認證授權
+- 請求限流控制
+- SQL 注入防護
+- XSS 攻擊防護
+
+### 11.3 運行安全
+- 錯誤處理機制
+- 日誌記錄系統
+- 異常監控告警
+- 自動故障轉移
+
+## 12. 故障排除指南
+
+### 12.1 常見問題
+1. 資料庫連接問題
+2. API 調用失敗
+3. 文件處理錯誤
+4. 模型響應超時
+
+### 12.2 診斷步驟
+1. 檢查日誌記錄
+2. 驗證配置文件
+3. 測試網絡連接
+4. 確認服務狀態
+
+### 12.3 解決方案
+1. 重啟相關服務
+2. 清理緩存數據
+3. 更新 API 密鑰
+4. 回滾代碼版本
+
+## 13. 系統架構詳解
+
+### 13.1 多模型整合架構
+```plaintext
+模型管理系統：
+├── ModelManager
+│   ├── ModelSelector：模型選擇器
+│   ├── PromptManager：提示詞管理
+│   └── ResponseProcessor：回應處理
+├── ModelAdapters
+│   ├── OpenAIAdapter
+│   ├── ClaudeAdapter
+│   └── GeminiAdapter
+└── ModelMonitor
+    ├── PerformanceTracker
+    └── CostController
+```
+
+#### 13.1.1 模型選擇策略
+- 成本效益評估
+- 任務類型匹配
+- 負載均衡
+- 回退機制
+
+#### 13.1.2 提示詞優化
+- 動態模板系統
+- 上下文壓縮
+- 參數調優
+- 多輪對話管理
+
+### 13.2 知識庫系統架構
+```plaintext
+知識管理系統：
+├── ContentManager
+│   ├── DocumentProcessor
+│   ├── ChunkManager
+│   └── MetadataHandler
+├── StorageManager
+│   ├── VectorDB
+│   ├── DocumentDB
+│   └── CacheSystem
+└── SearchEngine
+    ├── QueryProcessor
+    ├── RankingSystem
+    └── ResultOptimizer
+```
+
+#### 13.2.1 文檔處理優化
+- 智能分段算法
+- 重複內容檢測
+- 關鍵信息提取
+- 自動摘要生成
+
+#### 13.2.2 檢索策略
+- 混合檢索模型
+- 語義相似度計算
+- 動態權重調整
+- 結果聚合優化
+
+### 13.3 插件系統架構
+```plaintext
+插件框架：
+├── PluginCore
+│   ├── PluginLoader
+│   ├── PluginManager
+│   └── PluginExecutor
+├── StandardPlugins
+│   ├── WebSearch
+│   ├── YouTubeProcessor
+│   └── WebBrowser
+└── PluginSDK
+    ├── Interface
+    ├── Utils
+    └── Templates
+```
+
+#### 13.3.1 插件生命週期
+1. 註冊階段
+   - 配置加載
+   - 依賴檢查
+   - 權限驗證
+
+2. 初始化階段
+   - 資源分配
+   - 連接建立
+   - 狀態初始化
+
+3. 運行階段
+   - 任務執行
+   - 狀態監控
+   - 錯誤處理
+
+4. 銷毀階段
+   - 資源釋放
+   - 連接關閉
+   - 清理操作
+
+### 13.4 監控系統架構
+```plaintext
+監控框架：
+├── MetricsCollector
+│   ├── SystemMetrics
+│   ├── BusinessMetrics
+│   └── CustomMetrics
+├── AlertManager
+│   ├── RuleEngine
+│   ├── NotificationSystem
+│   └── EscalationManager
+└── Dashboard
+    ├── RealTimeMonitor
+    ├── AnalyticsPanel
+    └── ReportGenerator
+```
+
+## 14. 開發最佳實踐
+
+### 14.1 代碼規範
+```python
+# 類型提示示例
+def process_document(
+    document: Document,
+    options: Dict[str, Any],
+    callback: Optional[Callable[[str], None]] = None
+) -> ProcessResult:
+    """
+    處理文檔並返回結果。
+
+    Args:
+        document: 要處理的文檔對象
+        options: 處理選項
+        callback: 可選的進度回調函數
+
+    Returns:
+        ProcessResult: 處理結果對象
+    
+    Raises:
+        ProcessError: 當處理失敗時
+    """
+    pass
+```
+
+### 14.2 測試規範
+```python
+# 測試用例示例
+@pytest.mark.asyncio
+async def test_document_processing():
+    # 準備測試數據
+    doc = Document(content="test content")
+    
+    # 執行測試
+    result = await processor.process(doc)
+    
+    # 驗證結果
+    assert result.success
+    assert len(result.chunks) > 0
+    assert result.metadata is not None
+```
+
+### 14.3 錯誤處理
+```python
+# 錯誤處理示例
+class DocumentProcessError(Exception):
+    """文檔處理錯誤基類"""
+    pass
+
+class ValidationError(DocumentProcessError):
+    """驗證錯誤"""
+    pass
+
+class ProcessingError(DocumentProcessError):
+    """處理過程錯誤"""
+    pass
+
+def process_with_error_handling(doc: Document) -> Result:
+    try:
+        # 驗證
+        if not validate_document(doc):
+            raise ValidationError("Invalid document")
+            
+        # 處理
+        result = process_document(doc)
+        if not result.success:
+            raise ProcessingError(result.error)
+            
+        return result
+    except ValidationError as e:
+        logger.error(f"Validation failed: {str(e)}")
+        raise
+    except ProcessingError as e:
+        logger.error(f"Processing failed: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        raise DocumentProcessError("Unexpected error occurred")
+```
+
+## 15. 部署架構
+
+### 15.1 開發環境
+```plaintext
+開發環境配置：
+├── 本地開發環境
+│   ├── VSCode + 插件
+│   ├── Python 3.9+
+│   └── 虛擬環境
+├── 測試環境
+│   ├── 單元測試
+│   ├── 整合測試
+│   └── 性能測試
+└── CI/CD
+    ├── GitHub Actions
+    ├── 自動化測試
+    └── 自動部署
+```
+
+### 15.2 生產環境
+```plaintext
+生產環境架構：
+├── 應用服務器
+│   ├── FastAPI 應用
+│   └── Streamlit 後台
+├── 資料庫服務器
+│   ├── SQLite
+│   └── 向量數據庫
+├── 快取服務器
+│   └── Redis
+└── 監控服務器
+    ├── 日誌收集
+    ├── 指標監控
+    └── 告警系統
+```
+
+## 16. 系統擴展性
+
+### 16.1 水平擴展
+- 負載均衡
+- 服務發現
+- 分布式部署
+- 數據分片
+
+### 16.2 垂直擴展
+- 性能優化
+- 資源配置
+- 並發處理
+- 異步操作
+
+### 16.3 功能擴展
+- 插件系統
+- API 網關
+- 服務編排
+- 微服務架構
+
+## 17. 版本控制與發布
+
+### 17.1 版本號規範
+- 主版本號：不兼容的 API 修改
+- 次版本號：向下兼容的功能性新增
+- 修訂號：向下兼容的問題修正
+
+### 17.2 發布流程
+1. 代碼審查
+2. 測試驗證
+3. 文檔更新
+4. 版本打包
+5. 部署發布
+6. 監控驗證
+
+### 17.3 回滾機制
+1. 版本備份
+2. 數據備份
+3. 快速回滾
+4. 影響評估
