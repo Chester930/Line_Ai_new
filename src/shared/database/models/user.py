@@ -17,7 +17,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
 
     # Relationship with conversations
-    conversations = relationship("Conversation", back_populates="user")
+    conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<User {self.display_name}>" 

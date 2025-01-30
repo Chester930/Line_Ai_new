@@ -1,72 +1,134 @@
 from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
-from datetime import datetime
-from dataclasses import dataclass, field
-from uuid import uuid4
+from uuid import UUID, uuid4
+from dataclasses import dataclass
 
 @dataclass
 class Message:
-    """會話消息"""
-    role: str
+    """消息類"""
+    id: UUID
+    user_id: str
     content: str
-    message_id: str = field(default_factory=lambda: str(uuid4()))
-    timestamp: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    
-    def __post_init__(self):
-        if self.timestamp is None:
-            self.timestamp = datetime.now()
-    
-    def to_dict(self) -> Dict:
-        """轉換為字典"""
-        return {
-            "role": self.role,
-            "content": self.content,
-            "timestamp": self.timestamp.isoformat()
-        }
+    timestamp: datetime
+    type: str = "text"
+    metadata: Dict[str, Any] = None
 
-@dataclass
+    def __init__(
+        self,
+        user_id: str,
+        content: str,
+        message_type: str = "text",
+        metadata: Optional[Dict] = None
+    ):
+        self.id = uuid4()
+        self.user_id = user_id
+        self.content = content
+        self.type = message_type
+        self.timestamp = datetime.utcnow()
+        self.metadata = metadata or {}
+
 class Session:
-    """會話"""
-    session_id: str = field(default_factory=lambda: str(uuid4()))
-    user_id: str = ""
-    messages: List[Message] = field(default_factory=list)
-    created_at: datetime = field(default_factory=datetime.now)
-    updated_at: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    
+    """會話類"""
+    def __init__(
+        self,
+        session_id: str,
+        user_id: str,
+        ttl: int = 3600,
+        metadata: Optional[Dict] = None
+    ):
+        self.id = session_id
+        self.user_id = user_id
+        self.ttl = ttl
+        self.created_at = datetime.utcnow()
+        self.last_activity = datetime.utcnow()
+        self.messages: List[Message] = []
+        self.metadata = metadata or {}
+
+    def is_expired(self) -> bool:
+        """檢查會話是否過期"""
+        return (datetime.utcnow() - self.last_activity).total_seconds() > self.ttl
+
+    def update_activity(self):
+        """更新最後活動時間"""
+        self.last_activity = datetime.utcnow()
+
     def add_message(self, message: Message):
-        """添加消息"""
+        """添加消息到會話"""
         self.messages.append(message)
-        self.updated_at = datetime.now()
-    
-    def clear_messages(self):
-        """清空消息"""
-        self.messages.clear()
-        self.updated_at = datetime.now()
-    
+        self.update_activity()
+
     def get_messages(
         self,
         limit: Optional[int] = None,
-        before: Optional[datetime] = None
+        message_type: Optional[str] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None
     ) -> List[Message]:
-        """獲取消息"""
-        messages = self.messages
-        
-        if before:
-            messages = [
-                msg for msg in messages
-                if msg.timestamp < before
-            ]
-        
+        """獲取消息歷史"""
+        filtered_messages = self.messages
+
+        if message_type:
+            filtered_messages = [m for m in filtered_messages if m.type == message_type]
+
+        if start_time:
+            filtered_messages = [m for m in filtered_messages if m.timestamp >= start_time]
+
+        if end_time:
+            filtered_messages = [m for m in filtered_messages if m.timestamp <= end_time]
+
         if limit:
-            messages = messages[-limit:]
-        
-        return messages
+            filtered_messages = filtered_messages[-limit:]
+
+        return filtered_messages
+
+    def clear_messages(self):
+        """清空消息歷史"""
+        self.messages = []
+
+    def update_metadata(self, metadata: Dict[str, Any]):
+        """更新元數據"""
+        self.metadata.update(metadata)
+
+    def remove_metadata(self, key: str):
+        """移除指定的元數據"""
+        self.metadata.pop(key, None)
+
+    def to_dict(self) -> Dict:
+        """將會話轉換為字典格式"""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "created_at": self.created_at.isoformat(),
+            "last_activity": self.last_activity.isoformat(),
+            "ttl": self.ttl,
+            "metadata": self.metadata,
+            "messages": [
+                {
+                    "id": str(msg.id),
+                    "user_id": msg.user_id,
+                    "content": msg.content,
+                    "type": msg.type,
+                    "timestamp": msg.timestamp.isoformat(),
+                    "metadata": msg.metadata
+                }
+                for msg in self.messages
+            ]
+        }
 
 class BaseSessionManager(ABC):
     """會話管理器基類"""
     
+    @abstractmethod
+    async def create_session(
+        self,
+        user_id: str,
+        ttl: int = 3600,
+        metadata: Dict[str, Any] = None
+    ) -> Session:
+        """創建新會話"""
+        pass
+
     @abstractmethod
     async def get_session(
         self,
@@ -74,24 +136,15 @@ class BaseSessionManager(ABC):
     ) -> Optional[Session]:
         """獲取會話"""
         pass
-    
+
     @abstractmethod
-    async def create_session(
-        self,
-        user_id: str,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> Session:
-        """創建會話"""
-        pass
-    
-    @abstractmethod
-    async def save_session(
+    async def update_session(
         self,
         session: Session
     ) -> bool:
-        """保存會話"""
+        """更新會話"""
         pass
-    
+
     @abstractmethod
     async def delete_session(
         self,
@@ -99,13 +152,10 @@ class BaseSessionManager(ABC):
     ) -> bool:
         """刪除會話"""
         pass
-    
+
     @abstractmethod
-    async def list_sessions(
-        self,
-        user_id: Optional[str] = None
-    ) -> List[Session]:
-        """列出會話"""
+    async def cleanup_expired(self) -> int:
+        """清理過期會話"""
         pass
 
 class BaseSession(ABC):

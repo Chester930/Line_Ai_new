@@ -1,7 +1,7 @@
 import logging
 import os
 from pathlib import Path
-from ..config.manager import config_manager
+from ..config import settings
 import sys
 from typing import Optional
 from logging.handlers import RotatingFileHandler
@@ -10,52 +10,55 @@ from time import time
 from datetime import datetime
 
 class LoggerConfig:
-    """日誌配置"""
+    """日誌配置類"""
     
     @staticmethod
-    def setup_logger(
-        name: str = "ai_assistant",
-        log_file: Optional[Path] = None
-    ) -> logging.Logger:
-        """設置日誌"""
-        # 載入配置
-        app_config = config_manager.get_app_config()
-        log_config = app_config.get("logging", {})
+    def setup_logger(name: str = None) -> logging.Logger:
+        """設置日誌記錄器"""
+        # 使用傳入的名稱或模組名
+        logger_name = name or __name__
+        logger = logging.getLogger(logger_name)
         
-        # 創建日誌器
-        logger = logging.getLogger(name)
-        logger.setLevel(log_config.get("level", "INFO"))
+        # 如果已經設置過處理器，直接返回
+        if logger.handlers:
+            return logger
+            
+        # 設置日誌級別
+        logger.setLevel(getattr(logging, settings.LOG_LEVEL))
+        
+        # 確保日誌目錄存在
+        log_dir = Path(settings.LOG_PATH)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 創建日誌文件路徑
+        log_file = log_dir / f"{logger_name}.log"
+        
+        # 創建處理器
+        file_handler = RotatingFileHandler(
+            filename=log_file,
+            maxBytes=int(5e6),  # 5MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        console_handler = logging.StreamHandler()
         
         # 設置格式
-        formatter = logging.Formatter(
-            log_config.get(
-                "format",
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            )
-        )
-        
-        # 控制台處理器
-        console_handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter(settings.LOG_FORMAT)
+        file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
         
-        # 文件處理器
-        if log_file:
-            log_file.parent.mkdir(parents=True, exist_ok=True)
-            file_handler = logging.FileHandler(
-                log_file,
-                encoding='utf-8'
-            )
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
+        # 添加處理器
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
         
         return logger
 
-# 創建全局日誌器
+# 創建默認日誌記錄器
 logger = LoggerConfig.setup_logger()
 
-# 導出 logger 實例
-__all__ = ["logger"]
+def get_logger(name: str = None) -> logging.Logger:
+    """獲取日誌記錄器"""
+    return LoggerConfig.setup_logger(name)
 
 class Logger:
     """自定義日誌類"""
@@ -159,4 +162,12 @@ def log_execution_time(logger: Logger):
     return decorator
 
 # 創建全局日誌實例
-logger = Logger() 
+logger = Logger()
+
+# 配置日誌
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL),
+    format=settings.LOG_FORMAT
+)
+
+logger = logging.getLogger(__name__) 

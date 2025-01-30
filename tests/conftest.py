@@ -51,7 +51,9 @@ def pytest_configure(config):
 
 @pytest.fixture(scope="session")
 def test_app():
-    """創建測試用的 FastAPI 應用程序"""
+    """創建測試用的 FastAPI 應用程式"""
+    # 確保使用測試環境配置
+    os.environ['ENV'] = 'test'
     return create_app()
 
 @pytest.fixture(scope="session")

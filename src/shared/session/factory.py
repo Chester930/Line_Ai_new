@@ -1,20 +1,38 @@
-from typing import Optional, Type
-from .base import BaseSessionManager
+from typing import Dict, Type, Optional
+from .base import Session
 from .memory import MemorySessionManager
 from ..utils.logger import logger
 
-class SessionManagerFactory:
-    """會話管理器工廠"""
-    
-    _managers = {
+class SessionFactory:
+    """會話工廠類"""
+    _managers: Dict[str, Type[Session]] = {
         "memory": MemorySessionManager
     }
     
     @classmethod
+    def register_manager(cls, name: str, manager_class: Type[Session]):
+        """註冊新的會話管理器類型"""
+        cls._managers[name] = manager_class
+
+    @classmethod
+    async def create_session(
+        cls,
+        session_type: str,
+        user_id: str,
+        metadata: Optional[dict] = None
+    ) -> Session:
+        """創建指定類型的會話"""
+        if session_type not in cls._managers:
+            raise ValueError(f"Unknown session type: {session_type}")
+        
+        manager = cls._managers[session_type]()
+        return await manager.create_session(user_id, metadata)
+
+    @classmethod
     def create_manager(
         cls,
         manager_type: str = "memory"
-    ) -> BaseSessionManager:
+    ) -> Session:
         """創建會話管理器"""
         try:
             manager_class = cls._managers.get(manager_type)
@@ -31,13 +49,3 @@ class SessionManagerFactory:
             logger.error(f"創建會話管理器失敗: {str(e)}")
             # 默認使用記憶體管理器
             return MemorySessionManager()
-    
-    @classmethod
-    def register_manager(
-        cls,
-        manager_type: str,
-        manager_class: Type[BaseSessionManager]
-    ):
-        """註冊新的管理器類型"""
-        cls._managers[manager_type] = manager_class
-        logger.info(f"已註冊新的會話管理器類型: {manager_type}") 

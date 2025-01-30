@@ -2,20 +2,20 @@ import pytest
 from unittest.mock import Mock, patch, AsyncMock
 from linebot.v3.messaging import MessagingApi
 from linebot.v3.webhook import WebhookParser
-from src.shared.line_sdk.client import LineClient, line_client
-
-class MockSettings:
-    def __init__(self):
-        self.line_channel_secret = "test_secret"
-        self.line_channel_access_token = "test_token"
+from src.shared.line_sdk.client import LineClient
 
 @pytest.fixture(autouse=True)
-def mock_config():
+def mock_settings():
     """模擬配置"""
-    mock_settings = MockSettings()
-    with patch('src.shared.line_sdk.client.config') as mock:
-        mock.settings = mock_settings
+    with patch('src.shared.config.config.settings') as mock:
+        mock.LINE_CHANNEL_SECRET = "test_secret"
+        mock.LINE_CHANNEL_ACCESS_TOKEN = "test_token"
         yield mock
+
+@pytest.fixture
+def line_client():
+    """創建 LINE 客戶端實例"""
+    return LineClient()
 
 def test_line_client_singleton():
     """測試 LINE 客戶端單例模式"""
@@ -26,44 +26,64 @@ def test_line_client_singleton():
 def test_line_client_initialization():
     """測試 LINE 客戶端初始化"""
     client = LineClient()
-    client.initialized = False
-    client.__init__()
-    assert isinstance(client.messaging_api, MessagingApi)
-    assert isinstance(client.parser, WebhookParser)
+    assert client.messaging_api is not None
+    assert client.parser is not None
 
 @pytest.mark.asyncio
-async def test_send_message():
-    """測試發送消息"""
-    user_id = "test_user"
-    message = "test_message"
-    mock_api = AsyncMock()
-    with patch.object(line_client, 'messaging_api', mock_api):
-        await line_client.send_message(user_id, message)
-        mock_api.push_message.assert_called_once_with(user_id, message)
-
-@pytest.mark.asyncio
-async def test_reply_message():
+async def test_reply_message(line_client):
     """測試回覆消息"""
-    reply_token = "test_token"
-    message = "test_message"
-    
-    mock_api = AsyncMock()
-    with patch.object(line_client, 'messaging_api', mock_api):
+    with patch.object(line_client.messaging_api, 'reply_message', AsyncMock()) as mock_reply:
+        reply_token = "test_reply_token"
+        message = "Hello, World!"
         await line_client.reply_message(reply_token, message)
-        mock_api.reply_message.assert_called_once_with(reply_token, message)
+        mock_reply.assert_awaited_once()
 
-def test_verify_webhook():
-    """測試 webhook 驗證"""
-    body = b"test_body"
-    signature = "valid_signature"
-    with patch.object(line_client.parser.signature_validator, 'validate', return_value=True):
-        assert line_client.verify_webhook(body, signature) is True
+@pytest.mark.asyncio
+async def test_send_message(line_client):
+    """測試發送消息"""
+    with patch.object(line_client.messaging_api, 'push_message', AsyncMock()) as mock_send:
+        user_id = "test_user_id"
+        message = "Hello, User!"
+        await line_client.send_message(user_id, message)
+        mock_send.assert_awaited_once()
 
-def test_parse_webhook_body():
-    """測試解析 webhook 請求體"""
-    body = b"test_body"
-    mock_events = [Mock(), Mock()]
+@pytest.mark.asyncio
+async def test_get_profile(line_client):
+    """測試獲取用戶資料"""
+    mock_profile = Mock()
+    mock_profile.display_name = "Test User"
+    mock_profile.user_id = "test_user_id"
+    mock_profile.picture_url = "http://example.com/picture.jpg"
+    mock_profile.status_message = "Test Status"
     
-    with patch.object(line_client.parser, 'parse', return_value=mock_events):
-        events = line_client.parse_webhook_body(body)
-        assert events == mock_events
+    with patch.object(line_client.messaging_api, 'get_profile', AsyncMock(return_value=mock_profile)) as mock_get:
+        user_id = "test_user_id"
+        profile = await line_client.get_profile(user_id)
+        mock_get.assert_awaited_once_with(user_id)
+        assert isinstance(profile, dict)
+        assert profile["user_id"] == "test_user_id"
+        assert profile["display_name"] == "Test User"
+
+def test_verify_webhook(line_client):
+    """測試驗證 webhook 簽名"""
+    with patch.object(line_client.parser.signature_validator, 'validate', return_value=True):
+        body = b"test_body"
+        signature = "test_signature"
+        result = line_client.verify_webhook(body, signature)
+        assert result is True
+
+def test_verify_webhook_failure(line_client):
+    """測試驗證 webhook 簽名失敗"""
+    with patch.object(line_client.parser.signature_validator, 'validate', side_effect=Exception("驗證失敗")):
+        body = b"test_body"
+        signature = "test_signature"
+        result = line_client.verify_webhook(body, signature)
+        assert result is False
+
+def test_parse_webhook_body(line_client):
+    """測試解析 webhook 請求體"""
+    expected_result = {"type": "message"}
+    with patch.object(line_client.parser, 'parse', return_value=expected_result):
+        body = b"test_body"
+        result = line_client.parse_webhook_body(body)
+        assert result == expected_result

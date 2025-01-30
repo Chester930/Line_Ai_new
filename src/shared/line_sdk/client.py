@@ -60,9 +60,16 @@ class LineClient:
         """回覆消息"""
         await self.messaging_api.reply_message(reply_token, message)
 
-    def get_profile(self, user_id: str) -> Dict[str, str]:
-        """獲取用戶資料"""
-        profile = self.messaging_api.get_profile(user_id)
+    async def get_profile(self, user_id: str) -> dict:
+        """獲取用戶資料
+        
+        Args:
+            user_id: 用戶 ID
+            
+        Returns:
+            用戶資料字典
+        """
+        profile = await self.messaging_api.get_profile(user_id)
         return {
             'user_id': profile.user_id,
             'display_name': profile.display_name,

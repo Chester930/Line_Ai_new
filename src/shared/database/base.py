@@ -1,21 +1,20 @@
 from typing import Any, Dict, Optional
 from pathlib import Path
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import QueuePool
 from sqlalchemy.exc import SQLAlchemyError
 
-from ..config.config import config, Settings
+from ..config import settings  # 更新引用路徑
 from ..utils.logger import logger
 
 # 使用新的方式定義 Base
-class Base(DeclarativeBase):
-    pass
+Base = declarative_base()
 
 # 創建數據庫引擎
 engine = create_engine(
-    config.settings.database_url,
-    echo=config.settings.database_echo,
+    settings.DATABASE_URL,
+    echo=settings.DATABASE_ECHO,
     poolclass=QueuePool,
     pool_size=5,
     max_overflow=10
@@ -47,15 +46,8 @@ class Database:
     
     def __init__(self):
         if not hasattr(self, 'initialized'):
-            self.engine = create_engine(
-                config.settings.database_url,
-                echo=config.settings.database_echo
-            )
-            self.SessionLocal = sessionmaker(
-                autocommit=False,
-                autoflush=False,
-                bind=self.engine
-            )
+            self.engine = create_engine(settings.DATABASE_URL, echo=settings.DATABASE_ECHO)
+            self.SessionLocal = sessionmaker(bind=self.engine)
             self.initialized = True
     
     def create_tables(self):
