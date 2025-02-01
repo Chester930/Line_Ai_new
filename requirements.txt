@@ -27,3 +27,9 @@ pytest-asyncio>=0.23.0
 google-generativeai>=0.3.0
 openai>=1.0.0
 anthropic>=0.3.0
+
+# Plugin System
+aiohttp>=3.8.0
+semver>=3.0.0
+watchdog>=2.1.9
+streamlit>=1.10.0

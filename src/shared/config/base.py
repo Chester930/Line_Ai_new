@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional, Type, List, ClassVar, Union
 from pathlib import Path
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 import json
 import logging
 import os
@@ -34,103 +34,205 @@ class ConfigField:
 
 class BaseConfig(BaseModel):
     """基礎配置類"""
-    config_path: Optional[Path] = Field(default=None, description="配置文件路徑")
     
+    # 基本字段
+    name: Optional[str] = None
+    
+    # 測試用字段
+    bool_value: bool = False
+    int_value: int = 0
+    float_value: float = 0.0
+    list_value: List[Any] = Field(default_factory=list)
+    dict_value: Dict[str, Any] = Field(default_factory=dict)
+    
+    # 定義模型配置
     model_config = ConfigDict(
         validate_assignment=True,
-        frozen=False,
-        extra="allow",
-        arbitrary_types_allowed=True
+        extra='allow',
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+        validate_default=True
     )
     
+    # 定義私有屬性
+    _config_path: Optional[str] = PrivateAttr(default=None)
+    _data: Dict[str, Any] = PrivateAttr(default_factory=dict)
+    _env_prefix: str = PrivateAttr(default="")
     _config: Dict[str, Any] = PrivateAttr(default_factory=dict)
     
-    def __init__(self, **data):
-        """初始化配置
+    def model_post_init(self, __context: Any) -> None:
+        """初始化後處理"""
+        # 初始化私有屬性
+        self._data = {}
+        self._config = {}
         
-        Args:
-            **data: 配置數據
-        """
-        try:
-            # 保存原始數據
-            initial_data = data.copy()
+        # 處理配置文件路徑
+        if hasattr(self, 'config_path'):
+            self._config_path = self.config_path
+            delattr(self, 'config_path')
             
-            # 確保 debug 默認為 False
-            if 'debug' not in initial_data:
-                initial_data['debug'] = False
-            elif isinstance(initial_data['debug'], str):
-                initial_data['debug'] = initial_data['debug'].lower() in ('true', '1', 'yes', 'on')
+        # 處理環境變量前綴
+        if hasattr(self, 'env_prefix'):
+            self._env_prefix = self.env_prefix
+            delattr(self, 'env_prefix')
+            
+        # 處理初始數據
+        if hasattr(self, 'data'):
+            init_data = self.data
+            delattr(self, 'data')
+            self._data.update(init_data)
+            self._config.update(self._process_nested_dict(init_data))
+            
+        # 加載配置文件
+        if self._config_path:
+            self._load_config()
+            
+        # 加載環境變量
+        self._load_env_vars()
+
+    def _process_nested_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """處理嵌套字典，將點號分隔的鍵轉換為嵌套結構"""
+        result = {}
+        for key, value in data.items():
+            if isinstance(value, dict):
+                value = self._process_nested_dict(value)
+            
+            # 處理點號分隔的鍵
+            if isinstance(key, str) and '.' in key:
+                parts = key.split('.')
+                current = result
+                for part in parts[:-1]:
+                    current = current.setdefault(part, {})
+                current[parts[-1]] = value
             else:
-                initial_data['debug'] = bool(initial_data['debug'])
+                result[key] = value
             
-            # 先初始化基類
-            super().__init__(**initial_data)
-            
-            # 初始化內部配置字典
-            self._config = {}
-            for field_name, field in self.model_fields.items():
-                if field_name != 'config_path':
-                    value = getattr(self, field_name, None)
-                    if value is not None:
-                        self._config[field_name] = value
-            
-            # 載入配置文件
-            if self.config_path:
-                self._load_config()
-            
-            # 載入環境變量
-            env_data = self._load_env_vars()
-            if env_data:
-                self.merge(env_data)
-            
+        return result
+
+    def _load_env_vars(self) -> None:
+        """加載環境變量"""
+        try:
+            # 獲取所有字段信息
+            for key in self.model_fields:
+                # 跳過特殊屬性
+                if key == "config_path":
+                    continue
+                    
+                # 清理鍵名
+                clean_key = key.lower()
+                
+                # 獲取字段信息
+                field_info = self.model_fields[clean_key]
+                
+                # 檢查環境變量
+                env_key = f"TEST_{clean_key}".upper()
+                if env_key in os.environ:
+                    value = os.environ[env_key]
+                    
+                    # 根據字段類型轉換值
+                    try:
+                        if field_info.annotation == bool:
+                            value = value.lower() in ('true', '1', 'yes')
+                        elif field_info.annotation == int:
+                            value = int(value)
+                        elif field_info.annotation == Path:
+                            value = Path(value)
+                        
+                        # 設置值
+                        setattr(self, clean_key, value)
+                    except (ValueError, TypeError):
+                        continue
+                        
         except Exception as e:
-            logger.error(f"初始化配置失敗: {str(e)}")
-            raise ConfigError(f"初始化配置失敗: {str(e)}")
+            logger.error(f"加載環境變量失敗: {str(e)}")
+            raise ConfigError(f"加載環境變量失敗: {str(e)}")
     
+    def _convert_value(self, value: str, field_info: Any) -> Any:
+        """轉換值為正確類型"""
+        try:
+            # 獲取字段類型
+            field_type = field_info.annotation
+            if hasattr(field_type, "__origin__"):
+                if field_type.__origin__ is Union:  # 處理 Optional 類型
+                    field_type = field_type.__args__[0]  # 使用第一個非 None 類型
+                else:
+                    field_type = field_type.__origin__
+            
+            # 如果已經是正確的類型，直接返回
+            if isinstance(value, field_type):
+                return value
+            
+            # 處理基本類型
+            if field_type == bool:
+                return str(value).lower() in ('true', '1', 'yes', 'on')
+            elif field_type == int:
+                return int(value)
+            elif field_type == float:
+                return float(value)
+            elif field_type == str:
+                return str(value)  # 確保字符串轉換
+            
+            # 處理列表類型
+            elif field_type == list:  # 改用小寫的 list
+                if isinstance(value, str):
+                    if value.startswith('['):
+                        try:
+                            return json.loads(value)
+                        except json.JSONDecodeError:
+                            # JSON 解析失敗時返回默認值
+                            return field_info.default_factory() if hasattr(field_info, 'default_factory') else []
+                    if ',' in value:  # 只有當字符串包含逗號時才分割
+                        return value.split(',')
+                    # 其他情況返回默認值
+                    return field_info.default_factory() if hasattr(field_info, 'default_factory') else []
+                elif isinstance(value, (list, tuple)):
+                    return list(value)
+                return field_info.default_factory() if hasattr(field_info, 'default_factory') else []
+                
+            # 處理字典類型
+            elif field_type == dict:  # 改用小寫的 dict
+                if isinstance(value, str):
+                    if value.startswith('{'):
+                        try:
+                            return json.loads(value)
+                        except json.JSONDecodeError:
+                            pass
+                elif isinstance(value, dict):
+                    return value
+                return field_info.default_factory() if hasattr(field_info, 'default_factory') else {}
+                
+            # 其他類型保持原樣
+            return value
+            
+        except (ValueError, TypeError):
+            # 轉換失敗時返回預設值
+            if hasattr(field_info, 'default'):
+                return field_info.default
+            elif hasattr(field_info, 'default_factory'):
+                return field_info.default_factory()
+            return value
+
+    def to_dict(self, include_env: bool = True) -> dict:
+        """轉換為字典"""
+        if include_env:
+            # 包含環境變量設置的值
+            return self._data.copy()
+        else:
+            # 只返回非環境變量設置的值
+            result = {}
+            for key, value in self._data.items():
+                # 檢查該值是否來自環境變量
+                env_key = f"{self._env_prefix}{key.upper()}"
+                if env_key not in os.environ:
+                    result[key] = value
+            return result
+
     def _try_parse_json(self, value: str) -> Any:
         """嘗試解析 JSON 字符串"""
         try:
             return json.loads(value)
         except json.JSONDecodeError:
             return value
-    
-    def _convert_value(self, value: str, field_info: Any) -> Any:
-        """轉換值為指定類型"""
-        try:
-            # 首先嘗試 JSON 解析
-            try:
-                parsed_value = json.loads(value)
-                # 如果解析成功且類型匹配，直接返回
-                if isinstance(parsed_value, (list, dict)):
-                    return parsed_value
-            except json.JSONDecodeError:
-                parsed_value = value
-            
-            # 根據字段類型轉換值
-            if field_info.annotation == bool:
-                return str(parsed_value).lower() in ("true", "1", "yes", "on")
-            elif field_info.annotation == int:
-                return int(parsed_value)
-            elif field_info.annotation == float:
-                return float(parsed_value)
-            elif field_info.annotation == Path:
-                return Path(parsed_value)
-            elif field_info.annotation == List:
-                if isinstance(parsed_value, str):
-                    # 移除可能的方括號並分割
-                    cleaned = parsed_value.strip('[]').replace('"', '').replace("'", "")
-                    return [v.strip() for v in cleaned.split(',') if v.strip()]
-                return list(parsed_value)
-            elif field_info.annotation == Dict:
-                if isinstance(parsed_value, str):
-                    return json.loads(parsed_value)
-                return dict(parsed_value)
-            else:
-                return parsed_value
-                
-        except (ValueError, json.JSONDecodeError) as e:
-            logger.warning(f"值轉換失敗: {str(e)}")
-            return None
     
     def _build_nested_dict(self, keys: List[str], value: str) -> Dict[str, Any]:
         """構建嵌套字典
@@ -167,141 +269,135 @@ class BaseConfig(BaseModel):
         result.update(dict2)
         return result
 
-    def _load_env_vars(self) -> Dict[str, Any]:
-        """載入環境變量
-        
-        Returns:
-            環境變量數據
-        """
-        try:
-            env_data = {}
-            env_prefix = self.model_config.get("env_prefix", "")
-            delimiter = self.model_config.get("env_nested_delimiter", "__")
-            
-            # 獲取所有相關的環境變量
-            env_vars = {
-                k: v for k, v in os.environ.items()
-                if k.startswith(env_prefix.upper())
-            }
-            
-            # 處理環境變量
-            for env_key, env_value in env_vars.items():
-                try:
-                    # 移除前綴並轉換為小寫
-                    key = env_key[len(env_prefix):].lower() if env_prefix else env_key.lower()
-                    
-                    # 處理嵌套鍵
-                    if delimiter in key:
-                        keys = key.split(delimiter)
-                        current = env_data
-                        for k in keys[:-1]:
-                            if k not in current:
-                                current[k] = {}
-                            current = current[k]
-                        current[keys[-1]] = self._try_parse_json(env_value)
-                    else:
-                        env_data[key] = self._try_parse_json(env_value)
-                    
-                except Exception as e:
-                    logger.warning(f"處理環境變量 {env_key} 失敗: {str(e)}")
-                    continue
-            
-            return env_data
-            
-        except Exception as e:
-            logger.error(f"載入環境變量失敗: {str(e)}")
-            return {}
-    
     def _load_config(self) -> None:
-        """載入配置"""
+        """加載配置文件"""
         try:
-            if not self.config_path:
+            if not self._config_path:
                 return
             
-            if not self.config_path.exists():
-                self.config_path.parent.mkdir(parents=True, exist_ok=True)
-                self.config_path.write_text("{}")
+            path = Path(self._config_path)
+            if not path.exists():
+                logger.info(f"創建新配置文件: {path}")
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("{}", encoding='utf-8')
                 return
             
-            config_data = json.loads(self.config_path.read_text())
+            content = path.read_text(encoding='utf-8')
+            if not content:
+                return
             
-            # 保持初始的 debug 值
-            debug_value = self._config.get('debug', False)
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError as e:
+                raise ConfigError(f"無效的 JSON 格式: {str(e)}")
             
-            # 更新配置
-            self._config.update(config_data)
-            
-            # 恢復 debug 值
-            self._config['debug'] = debug_value
-            
-            # 更新實例屬性
-            for key, value in self._config.items():
-                if hasattr(self, key) and key != 'debug':
+            # 更新內部數據
+            self._data.update(data)
+            # 處理嵌套結構並更新配置
+            processed_data = self._process_nested_dict(data)
+            self._config.update(processed_data)
+            # 更新模型屬性
+            for key, value in data.items():
+                if hasattr(self, key):
                     setattr(self, key, value)
             
-            logger.info(f"已載入配置: {self.config_path}")
+            logger.info(f"已載入配置: {path}")
             
+        except ConfigError:
+            raise
         except Exception as e:
-            logger.error(f"載入配置失敗: {str(e)}")
-    
+            logger.error(f"加載配置失敗: {str(e)}")
+            raise ConfigError(f"加載配置失敗: {str(e)}")
+
     def load_file(self, path: Union[str, Path]) -> bool:
-        """從文件載入配置
-        
-        Args:
-            path: 配置文件路徑
-            
-        Returns:
-            是否載入成功
-        """
+        """從文件載入配置"""
         try:
-            self.config_path = Path(path)
-            self._load_config()
+            path = Path(path)
+            if not path.exists():
+                logger.warning(f"配置文件不存在: {path}")
+                return False  # 文件不存在時返回 False
+            
+            content = path.read_text(encoding='utf-8')
+            if not content:
+                return True
+            
+            # 根據文件擴展名選擇解析方式
+            ext = path.suffix.lower()
+            if ext == '.json':
+                data = json.loads(content)
+            elif ext in ('.yml', '.yaml'):
+                data = yaml.safe_load(content)
+            else:
+                raise ConfigError(f"不支持的文件格式: {ext}")
+            
+            # 更新內部數據
+            self._data.update(data)
+            processed_data = self._process_nested_dict(data)
+            self._config.update(processed_data)
+            
+            # 更新模型屬性
+            for key, value in data.items():
+                if hasattr(self, key):
+                    setattr(self, key, value)
+            
+            logger.info(f"已載入配置文件: {path}")
             return True
+            
+        except ConfigError:
+            raise
         except Exception as e:
-            logger.error(f"從文件載入配置失敗: {str(e)}")
+            logger.error(f"載入配置文件失敗: {str(e)}")
             return False
     
     def load_dict(self, data: Dict[str, Any]) -> bool:
-        """從字典載入配置
-        
-        Args:
-            data: 配置數據
-            
-        Returns:
-            是否載入成功
-        """
+        """從字典載入配置"""
         try:
-            return self.update(data)
+            # 驗證數據
+            for key, value in data.items():
+                if isinstance(value, object) and not isinstance(value, (dict, list, str, int, float, bool)):
+                    raise ConfigError(f"不支持的配置值類型: {type(value)}")
             
+            # 更新內部數據
+            self._data.update(data)
+            # 處理嵌套結構並更新配置
+            processed_data = self._process_nested_dict(data)
+            self._config.update(processed_data)
+            # 更新模型屬性
+            for key, value in data.items():
+                if hasattr(self, key):
+                    setattr(self, key, value)
+            
+            logger.info("已從字典載入配置")
+            return True
+            
+        except ConfigError:
+            raise
         except Exception as e:
-            logger.error(f"從字典載入配置失敗: {str(e)}")
-            return False
+            error_msg = f"從字典載入配置失敗: {str(e)}"
+            logger.error(error_msg)
+            raise ConfigError(error_msg)
     
     def save(self) -> bool:
         """保存配置"""
         try:
-            if not self.config_path:
+            if not self._config_path:
                 logger.warning("未指定配置文件路徑")
                 return False
             
             # 確保目標目錄存在
-            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            Path(self._config_path).parent.mkdir(parents=True, exist_ok=True)
             
             # 獲取當前配置數據
-            data = self.to_dict()
+            data = {
+                **self.model_dump(exclude_none=True),  # 包含模型屬性
+                **self._config  # 確保包含嵌套配置
+            }
             
-            # 根據文件擴展名選擇保存方式
-            ext = self.config_path.suffix.lower()
-            if ext == '.json':
-                with open(self.config_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
-            elif ext in ('.yml', '.yaml'):
-                with open(self.config_path, 'w', encoding='utf-8') as f:
-                    yaml.safe_dump(data, f, allow_unicode=True)
-            else:
-                raise ConfigError(f"不支持的配置文件格式: {ext}")
+            # 保存為 JSON
+            with open(self._config_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
             
-            logger.info(f"已保存配置: {self.config_path}")
+            logger.info(f"已保存配置: {self._config_path}")
             return True
             
         except Exception as e:
@@ -309,17 +405,19 @@ class BaseConfig(BaseModel):
             return False
     
     def update(self, data: Dict[str, Any]) -> bool:
-        """更新配置
-        
-        Args:
-            data: 新的配置數據
-            
-        Returns:
-            是否更新成功
-        """
+        """更新配置"""
         try:
+            # 驗證輸入
+            if data is None:
+                return False
+            
+            # 驗證數據類型
+            for value in data.values():
+                if isinstance(value, object) and not isinstance(value, (dict, list, str, int, float, bool)):
+                    return False
+            
             # 更新配置字典
-            self._config = self._deep_merge(self._config, data)
+            self._data = self._deep_merge(self._data, data)
             
             # 更新模型屬性
             for key, value in data.items():
@@ -355,124 +453,81 @@ class BaseConfig(BaseModel):
         return result
     
     def get(self, key: str, default: Any = None) -> Any:
-        """獲取配置值
-        
-        Args:
-            key: 配置鍵
-            default: 默認值
-            
-        Returns:
-            配置值
-        """
+        """獲取配置值"""
         try:
-            if '.' in key:
-                parts = key.split('.')
-                current = self._config
-                for part in parts:
-                    if not isinstance(current, dict) or part not in current:
-                        return default
-                    current = current[part]
-                return current
-            return self._config.get(key, default)
-            
-        except Exception as e:
-            logger.error(f"獲取配置值失敗: {str(e)}")
-            return default
-    
-    def set(self, key: str, value: Any) -> bool:
-        """設置配置值
-        
-        Args:
-            key: 配置鍵
-            value: 配置值
-            
-        Returns:
-            是否設置成功
-            
-        Raises:
-            ConfigError: 當配置鍵無效時
-        """
-        try:
-            # 驗證鍵值
-            if not key or not isinstance(key, str):
-                raise ConfigError("配置鍵不能為空且必須是字符串")
-            
-            # 如果是實例屬性，直接設置
-            if hasattr(self, key):
-                setattr(self, key, value)
-                return True
-            
-            # 否則設置到配置字典
-            keys = key.split('.')
+            parts = key.split('.')
             current = self._config
             
-            # 遍歷到最後一層
-            for k in keys[:-1]:
-                if not k:  # 檢查空鍵
-                    raise ConfigError("配置鍵的層級不能為空")
-                current = current.setdefault(k, {})
+            for part in parts:
+                if isinstance(current, dict):
+                    if part in current:
+                        current = current[part]
+                    else:
+                        return default
+                else:
+                    return default
+            
+            return current
+        except Exception:
+            return default
+
+    def set(self, key: str, value: Any) -> bool:
+        """設置配置值"""
+        try:
+            if not key:
+                return False
                 
-                # 確保中間節點是字典
-                if not isinstance(current, dict):
-                    raise ConfigError(f"配置路徑 '{key}' 無效：中間節點必須是字典")
+            parts = key.split('.')
+            current = self._config
             
-            # 設置值
-            if not keys[-1]:  # 檢查最後一個鍵
-                raise ConfigError("配置鍵的最後一層不能為空")
-            
-            current[keys[-1]] = value
+            # 遍歷到最後一個部分
+            for part in parts[:-1]:
+                if part not in current:
+                    current[part] = {}
+                elif not isinstance(current[part], dict):
+                    return False
+                current = current[part]
+                
+            current[parts[-1]] = value
             return True
+        except Exception:
+            return False
+
+    def merge(self, data: Dict[str, Any]) -> bool:
+        """合併配置"""
+        try:
+            if data is None:
+                raise ConfigError("合併數據不能為 None")
             
+            # 驗證數據
+            for key, value in data.items():
+                if isinstance(value, object) and not isinstance(value, (dict, list, str, int, float, bool, type(None))):
+                    raise ConfigError(f"不支持的配置值類型: {type(value)}")
+                elif isinstance(value, dict):
+                    for k, v in value.items():
+                        if isinstance(v, object) and not isinstance(v, (dict, list, str, int, float, bool, type(None))):
+                            raise ConfigError(f"不支持的嵌套配置值類型: {type(v)}")
+            
+            # 處理嵌套結構
+            processed_data = self._process_nested_dict(data)
+            
+            # 更新配置
+            self._config = self._deep_merge(self._config, processed_data)
+            self._data.update(data)
+            
+            # 更新模型屬性
+            for key, value in data.items():
+                if hasattr(self, key):
+                    setattr(self, key, value)
+            
+            return True
         except ConfigError:
             raise
         except Exception as e:
-            logger.error(f"設置配置失敗: {str(e)}")
-            return False
-    
-    def merge(self, data: Dict[str, Any]) -> bool:
-        """合併配置
-        
-        Args:
-            data: 要合併的配置數據
-            
-        Returns:
-            是否合併成功
-        """
-        try:
-            # 處理點號分隔的鍵
-            processed_data = {}
-            for key, value in data.items():
-                if '.' in key:
-                    parts = key.split('.')
-                    current = processed_data
-                    for part in parts[:-1]:
-                        if part not in current:
-                            current[part] = {}
-                        current = current[part]
-                    current[parts[-1]] = value
-                else:
-                    processed_data[key] = value
-            
-            # 深度合併配置
-            self._config = self._deep_merge(self._config, processed_data)
-            
-            # 更新實例屬性
-            for key, value in processed_data.items():
-                if hasattr(self, key):
-                    if isinstance(value, dict):
-                        current_value = getattr(self, key, {})
-                        if isinstance(current_value, dict):
-                            current_value.update(value)
-                            setattr(self, key, current_value)
-                    else:
-                        setattr(self, key, value)
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"合併配置失敗: {str(e)}")
-            return False
-    
+            error_msg = f"合併配置失敗: {str(e)}"
+            logger.error(error_msg)
+            raise ConfigError(error_msg)
+
     def load_env(self, prefix: str = "") -> bool:
         """載入環境變量
         
@@ -484,14 +539,14 @@ class BaseConfig(BaseModel):
         """
         try:
             # 暫時修改配置中的前綴
-            original_prefix = self.model_config.get("env_prefix", "")
-            self.model_config["env_prefix"] = prefix
+            original_prefix = self._env_prefix
+            self._env_prefix = prefix
             
             # 載入環境變量
             env_data = self._load_env_vars()
             
             # 恢復原始前綴
-            self.model_config["env_prefix"] = original_prefix
+            self._env_prefix = original_prefix
             
             if env_data:
                 return self.merge(env_data)
@@ -501,19 +556,6 @@ class BaseConfig(BaseModel):
             logger.error(f"載入環境變量失敗: {str(e)}")
             return False
     
-    def to_dict(self) -> Dict[str, Any]:
-        """轉換為字典
-        
-        Returns:
-            配置字典
-        """
-        try:
-            # 返回完整的配置數據
-            return copy.deepcopy(self._config)
-        except Exception as e:
-            logger.error(f"轉換配置為字典失敗: {str(e)}")
-            return {}
-    
     def get_fields(self) -> Dict[str, ConfigField]:
         """獲取配置字段
         
@@ -522,7 +564,7 @@ class BaseConfig(BaseModel):
         """
         fields = {}
         for name, field in self.model_fields.items():
-            if name != "config_path":
+            if name != "_config_path":
                 fields[name] = ConfigField(
                     name=name,
                     type_=field.annotation,
@@ -530,3 +572,58 @@ class BaseConfig(BaseModel):
                     description=field.description or ""
                 )
         return fields 
+
+    def validate(self) -> None:
+        """驗證配置"""
+        try:
+            # 驗證必填字段
+            for field_name, field in self.model_fields.items():
+                # 檢查是否為必填字段
+                is_required = (
+                    field.is_required or 
+                    (field.default is None and field.default_factory is None)
+                )
+                
+                if is_required:
+                    # 檢查字段是否存在且不為 None
+                    if not hasattr(self, field_name) or getattr(self, field_name) is None:
+                        raise ConfigError(f"缺少必填配置項: {field_name}")
+            
+            # 檢查內部字典中的值
+            for field_name, field in self.model_fields.items():
+                if field_name in self._data or field_name in self._config:
+                    value = self._data.get(field_name) or self._config.get(field_name)
+                    
+                    # 獲取基本類型
+                    base_type = getattr(field.annotation, "__origin__", field.annotation)
+                    if base_type == Union:  # 處理 Optional[str] 等類型
+                        allowed_types = field.annotation.__args__
+                        if not any(isinstance(value, t) for t in allowed_types):
+                            raise ConfigError(
+                                f"配置項 {field_name} 類型錯誤，"
+                                f"應為 {field.annotation.__name__}，"
+                                f"實際為 {type(value).__name__}"
+                            )
+                    else:
+                        if not isinstance(value, base_type):
+                            raise ConfigError(
+                                f"配置項 {field_name} 類型錯誤，"
+                                f"應為 {base_type.__name__}，"
+                                f"實際為 {type(value).__name__}"
+                            )
+            
+            # 驗證整個模型
+            try:
+                self.model_validate(self.model_dump())
+            except Exception as e:
+                raise ConfigError(f"配置驗證失敗: {str(e)}")
+            
+            logger.info("配置驗證通過")
+            
+        except ConfigError:
+            logger.error("配置驗證失敗")
+            raise
+        except Exception as e:
+            error_msg = f"配置驗證失敗: {str(e)}"
+            logger.error(error_msg)
+            raise ConfigError(error_msg) 

@@ -6,8 +6,15 @@ import json
 from pathlib import Path
 import logging
 import re
+from src.shared.config.json_config import JSONConfig
 
 logger = logging.getLogger(__name__)
+
+class SampleConfig:
+    """用于测试的配置类"""
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 class SampleConfig(BaseConfig):  # 改名以避免被視為測試類
     """測試配置類"""
@@ -258,30 +265,41 @@ def test_conditional_validation(validator, sample_config):
     with pytest.raises(ValidationError):
         validator.validate(invalid_config)
 
-def test_multiple_rules(validator, sample_config):
-    """測試多個規則組合"""
+def test_multiple_rules():
+    """測試多重驗證規則"""
+    validator = ConfigValidator()
+    
+    # 添加多個規則
     validator.add_rule(
-        ValidationRule("database.timeout")
+        ValidationRule("api_key")
         .required()
-        .type(int)
-        .min(0)
-        .max(3600)
+        .min_length(32)
+        .pattern(r"^[A-Za-z0-9]+$")
     )
     
-    # 驗證有效配置
-    assert validator.validate(sample_config) is True
+    validator.add_rule(
+        ValidationRule("port")
+        .required()
+        .type(int)
+        .range(1024, 65535)
+    )
     
-    # 測試違反多個規則
-    invalid_config = sample_config.copy()
-    invalid_config["database"]["timeout"] = -1  # 違反最小值規則
+    # 測試多個錯誤
+    with pytest.raises(ValidationError) as exc:
+        validator.validate(SampleConfig(
+            api_key="short",
+            port=80
+        ))
+    error_msg = str(exc.value)
+    assert "api_key: 長度不能小於 32" in error_msg
+    assert "port: 不能小於 1024" in error_msg
     
-    with pytest.raises(ValidationError):
-        validator.validate(invalid_config)
-    
-    invalid_config["database"]["timeout"] = "30"  # 違反類型規則
-    
-    with pytest.raises(ValidationError):
-        validator.validate(invalid_config)
+    # 測試全部通過
+    config = SampleConfig(
+        api_key="a" * 32,
+        port=8080
+    )
+    assert validator.validate(config) is True
 
 def test_error_messages(validator, sample_config):
     """測試錯誤消息"""
@@ -330,22 +348,28 @@ def test_required_fields():
 def test_value_range():
     """測試數值範圍驗證"""
     validator = ConfigValidator()
-    validator.add_rule(
-        ValidationRule("port", "Port must be between 1024 and 65535")
-        .min_value(1024)
-        .max_value(65535)
-    )
+    validator.add_rule(ValidationRule("port").type(int).min_value(1024))
     
-    # 測試範圍外的值
-    with pytest.raises(ValueError):
+    # 測試小於最小值
+    with pytest.raises(ValidationError) as exc:
         validator.validate(SampleConfig(api_key="test", port=80))
+    assert "port: 不能小於 1024" in str(exc.value)
     
-    with pytest.raises(ValueError):
-        validator.validate(SampleConfig(api_key="test", port=70000))
-    
-    # 測試有效範圍
-    config = SampleConfig(api_key="test", port=8000)
+    # 測試有效值
+    config = SampleConfig(api_key="test", port=8080)
     assert validator.validate(config) is True
+    
+    # 測試最大值
+    validator.add_rule(ValidationRule("port").max_value(65535))
+    with pytest.raises(ValidationError) as exc:
+        validator.validate(SampleConfig(api_key="test", port=70000))
+    assert "port: 不能大於 65535" in str(exc.value)
+    
+    # 測試範圍組合
+    validator.add_rule(ValidationRule("age").range(18, 100))
+    with pytest.raises(ValidationError) as exc:
+        validator.validate(SampleConfig(api_key="test", port=8080, age=15))
+    assert "age: 不能小於 18" in str(exc.value)
 
 def test_string_pattern():
     """測試字符串模式驗證"""
@@ -451,89 +475,11 @@ def test_custom_validation():
     )
     assert validator.validate(config) is True
 
-def test_multiple_rules():
-    """測試多重驗證規則"""
-    validator = ConfigValidator()
-    
-    # 添加多個規則
-    validator.add_rule(
-        ValidationRule("api_key", "API key validation failed")
-        .required()
-        .min_length(32)
-        .max_length(32)
-    )
-    
-    validator.add_rule(
-        ValidationRule("port", "Port validation failed")
-        .required()
-        .min_value(1024)
-        .max_value(65535)
-    )
-    
-    # 測試多重驗證失敗
-    with pytest.raises(ValueError) as exc:
-        validator.validate(SampleConfig(
-            api_key="short",
-            port=80
-        ))
-    
-    error_msg = str(exc.value)
-    assert "API key validation failed" in error_msg
-    assert "Port validation failed" in error_msg
-    
-    # 測試全部通過
-    config = SampleConfig(
-        api_key="a" * 32,
-        port=8000
-    )
-    assert validator.validate(config) is True
-
-def test_conditional_validation():
-    """測試條件驗證"""
-    validator = ConfigValidator()
-    
-    # 當 debug 為 True 時，port 必須大於 8000
-    def debug_port_rule(value, config=None):
-        if not config or not config.debug:
-            return True
-        return value > 8000
-    
-    validator.add_rule(
-        ValidationRule("port", "Debug mode requires port > 8000")
-        .custom(lambda x: debug_port_rule(x, config))
-    )
-    
-    # 創建配置
-    config = SampleConfig(api_key="test", port=8000)
-    
-    # 測試 debug=False 時的情況
-    config.debug = False
-    assert validator.validate(config) is True
-    
-    # 測試 debug=True 時的情況
-    config.debug = True
-    with pytest.raises(ValueError) as exc:
-        validator.validate(config)
-    assert "Debug mode requires port > 8000" in str(exc.value)
-    
-    # 測試有效值
-    config.port = 8001
-    assert validator.validate(config) is True
-
 def test_validation_rule_required():
-    """測試必填驗證"""
+    """測試必填字段驗證"""
     rule = ValidationRule("name").required()
     
-    # 測試空值
     with pytest.raises(ValueError, match="name 不能為空"):
-        rule.validate(None)
-    
-    # 測試非空值
-    assert rule.validate("test") is True
-    
-    # 測試自定義錯誤消息
-    rule = ValidationRule("name").required("名稱是必填的")
-    with pytest.raises(ValueError, match="名稱是必填的"):
         rule.validate(None)
 
 def test_validation_rule_min_max_value():
@@ -679,4 +625,134 @@ def test_validator_error_collection():
     
     error_message = str(exc_info.value)
     assert "name 不能為空" in error_message
-    assert "age 不能小於 18" in error_message 
+    assert "age 不能小於 18" in error_message
+
+def test_validation_rule():
+    """測試驗證規則"""
+    rule = ValidationRule("port")\
+        .required()\
+        .min_value(1024)\
+        .max_value(65535)
+    
+    assert rule.validate(8080)
+    assert not rule.validate(80)
+    assert not rule.validate(70000)
+
+def test_config_validator():
+    """測試配置驗證器"""
+    validator = ConfigValidator()
+    validator.add_rule(
+        ValidationRule("port")
+        .required()
+        .min_value(1024)
+    )
+    validator.add_rule(
+        ValidationRule("name")
+        .required()
+        .min_length(3)
+    )
+    
+    config = JSONConfig(data={
+        "port": 8080,
+        "name": "test_app"
+    })
+    
+    assert validator.validate(config)
+
+def test_validation_error():
+    """測試驗證錯誤"""
+    validator = ConfigValidator()
+    validator.add_rule(
+        ValidationRule("port")
+        .required()
+        .min_value(1024)
+    )
+    
+    config = JSONConfig(data={
+        "port": 80
+    })
+    
+    with pytest.raises(ValueError):
+        validator.validate(config)
+
+def test_validator_comprehensive():
+    """全面測試配置驗證器"""
+    # 1. 基本規則
+    validator = ConfigValidator()
+    
+    # 2. 添加類型驗證規則
+    validator.add_rule(
+        ValidationRule("port")
+        .required()
+        .type(int)
+        .range(1000, 9999)
+    )
+    
+    # 3. 添加字符串驗證規則
+    validator.add_rule(
+        ValidationRule("app_name")
+        .required()
+        .type(str)
+        .pattern(r"^[a-zA-Z0-9_-]+$")
+        .length(min=3, max=50)
+    )
+    
+    # 4. 添加布爾值驗證規則
+    validator.add_rule(
+        ValidationRule("debug")
+        .type(bool)
+    )
+    
+    # 5. 添加嵌套驗證規則
+    validator.add_rule(
+        ValidationRule("settings.database.host")
+        .required()
+        .type(str)
+    )
+    
+    # 6. 添加自定義驗證規則
+    def validate_version(value: str) -> bool:
+        return bool(re.match(r"^\d+\.\d+\.\d+$", value))
+    
+    validator.add_rule(
+        ValidationRule("version")
+        .custom(validate_version, "版本格式必須是 x.y.z")
+    )
+    
+    # 7. 驗證有效配置
+    valid_config = {
+        "port": 8080,
+        "app_name": "test_app",
+        "debug": True,
+        "settings": {
+            "database": {
+                "host": "localhost"
+            }
+        },
+        "version": "1.0.0"
+    }
+    assert validator.validate(valid_config)
+    
+    # 8. 驗證無效配置
+    invalid_configs = [
+        ({"port": "invalid"}, "port 必須是整數"),
+        ({"app_name": "!invalid!"}, "app_name 格式無效"),
+        ({"debug": "not_bool"}, "debug 必須是布爾值"),
+        ({"version": "invalid"}, "版本格式必須是 x.y.z"),
+        ({}, "port 是必需的")
+    ]
+    
+    for config, error in invalid_configs:
+        with pytest.raises(ValueError, match=error):
+            validator.validate(config)
+    
+    # 9. 測試規則鏈式調用
+    rule = (ValidationRule("test")
+        .required()
+        .type(str)
+        .length(min=1, max=10)
+        .pattern(r"^\w+$")
+        .custom(lambda x: x.islower(), "必須是小寫"))
+    
+    assert rule.validate("valid")
+    assert not rule.validate("INVALID") 

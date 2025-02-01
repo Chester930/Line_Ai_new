@@ -1,0 +1,30 @@
+{
+  "web_search": {
+    "1.0.0": {
+      "version": "1.0.0",
+      "description": "網頁搜索插件",
+      "author": "開發團隊",
+      "dependencies": {},
+      "requirements": ["aiohttp>=3.8.0"],
+      "changes": "初始版本"
+    },
+    "1.1.0": {
+      "version": "1.1.0",
+      "description": "網頁搜索插件",
+      "author": "開發團隊",
+      "dependencies": {},
+      "requirements": ["aiohttp>=3.8.0"],
+      "changes": "添加高級搜索功能"
+    }
+  },
+  "image_analyzer": {
+    "1.0.0": {
+      "version": "1.0.0",
+      "description": "圖片分析插件",
+      "author": "開發團隊",
+      "dependencies": {},
+      "requirements": ["Pillow>=9.0.0"],
+      "changes": "初始版本"
+    }
+  }
+} 

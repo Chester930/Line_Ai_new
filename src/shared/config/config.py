@@ -15,11 +15,11 @@ class Settings(BaseSettings):
     
     # 環境設定
     ENV: str = "development"
-    DEBUG: bool = True
+    DEBUG: bool = False
     ENVIRONMENT: str = "development"
     
     # 應用程式設定
-    APP_NAME: str = "LINE_AI_Assistant"
+    APP_NAME: str = "LINE AI Assistant"
     APP_PORT: int = 5000
     APP_HOST: str = "0.0.0.0"
     

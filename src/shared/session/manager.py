@@ -1,78 +1,91 @@
 from typing import Dict, Optional
 from datetime import datetime
-from .base import BaseSession, Message
-from .memory import MemorySession
+import asyncio
+from .base import BaseSessionManager, Session, Message
 from ..utils.logger import logger
 from ..utils.helpers import generate_session_id
 
-class SessionManager:
-    """會話管理器"""
+class SessionManager(BaseSessionManager):
+    """會話管理器實現"""
     
-    def __init__(
-        self,
-        session_timeout: int = 3600,  # 1小時
-        max_sessions: int = 1000,
-        max_messages: int = 50
-    ):
-        self.session_timeout = session_timeout
-        self.max_sessions = max_sessions
-        self.max_messages = max_messages
-        self.sessions: Dict[str, BaseSession] = {}
+    def __init__(self):
+        self.sessions: Dict[str, Session] = {}
+        self._cleanup_task = None
     
-    async def get_session(
-        self,
-        session_id: str,
-        user_id: Optional[str] = None
-    ) -> Optional[BaseSession]:
-        """獲取會話"""
-        try:
-            session = self.sessions.get(session_id)
-            
-            # 檢查會話是否存在且未過期
-            if session and not session.is_expired(self.session_timeout):
-                if user_id and session.user_id != user_id:
-                    return None
-                return session
-                
-            # 如果會話過期或不存在，且提供了用戶ID，創建新會話
-            if user_id:
-                return await self.create_session(user_id)
-                
-            return None
-            
-        except Exception as e:
-            logger.error(f"獲取會話失敗: {str(e)}")
-            return None
+    async def start(self):
+        """啟動會話管理器"""
+        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+    
+    async def stop(self):
+        """停止會話管理器"""
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
     
     async def create_session(
         self,
         user_id: str,
-        session_id: Optional[str] = None
-    ) -> BaseSession:
-        """創建會話"""
-        try:
-            # 生成會話ID
-            session_id = session_id or generate_session_id(user_id)
-            
-            # 檢查會話數量限制
-            if len(self.sessions) >= self.max_sessions:
-                self._cleanup_expired_sessions()
-                
-            # 創建新會話
-            session = MemorySession(
-                session_id=session_id,
-                user_id=user_id,
-                max_messages=self.max_messages
-            )
-            
-            self.sessions[session_id] = session
-            logger.info(f"創建新會話: {session_id} (用戶: {user_id})")
-            
-            return session
-            
-        except Exception as e:
-            logger.error(f"創建會話失敗: {str(e)}")
+        ttl: int = 3600,
+        metadata: Optional[Dict] = None
+    ) -> Session:
+        """創建新會話"""
+        session = Session(
+            session_id=str(uuid4()),
+            user_id=user_id,
+            ttl=ttl,
+            metadata=metadata
+        )
+        self.sessions[session.id] = session
+        logger.info(f"Created new session {session.id} for user {user_id}")
+        return session
+    
+    async def get_session(self, session_id: str) -> Optional[Session]:
+        """獲取會話"""
+        session = self.sessions.get(session_id)
+        if session and session.is_expired():
+            await self.delete_session(session_id)
             return None
+        return session
+    
+    async def update_session(self, session: Session) -> bool:
+        """更新會話"""
+        if session.id not in self.sessions:
+            return False
+        self.sessions[session.id] = session
+        return True
+    
+    async def delete_session(self, session_id: str) -> bool:
+        """刪除會話"""
+        if session_id in self.sessions:
+            del self.sessions[session_id]
+            logger.info(f"Deleted session {session_id}")
+            return True
+        return False
+    
+    async def cleanup_expired(self) -> int:
+        """清理過期會話"""
+        expired_count = 0
+        for session_id in list(self.sessions.keys()):
+            session = self.sessions[session_id]
+            if session.is_expired():
+                await self.delete_session(session_id)
+                expired_count += 1
+        return expired_count
+    
+    async def _cleanup_loop(self):
+        """定期清理過期會話"""
+        while True:
+            try:
+                expired_count = await self.cleanup_expired()
+                if expired_count > 0:
+                    logger.info(f"Cleaned up {expired_count} expired sessions")
+                await asyncio.sleep(300)  # 每5分鐘清理一次
+            except Exception as e:
+                logger.error(f"Error in cleanup loop: {str(e)}")
+                await asyncio.sleep(60)  # 發生錯誤時等待1分鐘
     
     async def add_message(
         self,
@@ -92,19 +105,6 @@ class SessionManager:
         except Exception as e:
             logger.error(f"添加消息失敗: {str(e)}")
             return False
-    
-    def _cleanup_expired_sessions(self):
-        """清理過期會話"""
-        expired = [
-            sid for sid, session in self.sessions.items()
-            if session.is_expired(self.session_timeout)
-        ]
-        
-        for session_id in expired:
-            del self.sessions[session_id]
-            
-        if expired:
-            logger.info(f"清理 {len(expired)} 個過期會話")
     
     async def close_session(self, session_id: str) -> bool:
         """關閉會話"""

@@ -1,5 +1,5 @@
 import time
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Callable
 from fastapi import Request, Response
 from .base import BaseMiddleware
 from ..utils.exceptions import RateLimitError

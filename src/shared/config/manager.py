@@ -3,34 +3,36 @@ from pathlib import Path
 import os
 import json
 import logging
+from pydantic import BaseModel
 from .base import BaseConfig, ConfigError
 from .validator import ConfigValidator, ValidationError
-
-logger = logging.getLogger(__name__)
+from .config import Settings
+from ..utils.logger import logger
 
 class ConfigManager:
     """配置管理器"""
     
-    def __init__(
-        self,
-        config_dir: Union[str, Path] = None,
-        environment: str = None,
-        validator: ConfigValidator = None
-    ):
-        """初始化配置管理器
-        
-        Args:
-            config_dir: 配置文件目錄
-            environment: 環境名稱
-            validator: 配置驗證器
-        """
-        self.base_path = Path(config_dir) if config_dir else Path("config")
-        self.environment = environment or os.getenv("APP_ENV", "development")
-        self.validator = validator or ConfigValidator()
-        self.configs: Dict[str, BaseConfig] = {}
-        
-        # 確保配置目錄存在
-        self._ensure_config_dir()
+    _instance = None
+    _initialized = False
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    @property
+    def settings(self):
+        return self._settings
+
+    def __init__(self, config_dir: Union[str, Path] = None):
+        if not self._initialized:
+            self.base_path = Path(config_dir) if config_dir else Path("config")
+            self.configs = {}
+            self.validators = {}
+            self.environment = os.getenv("APP_ENV", "development")
+            self.validator = ConfigValidator()  # 添加默認驗證器
+            self._initialized = True
+            self._ensure_config_dir()
     
     def _ensure_config_dir(self) -> None:
         """確保配置目錄存在"""
@@ -48,38 +50,12 @@ class ConfigManager:
         filename: str = None,
         **kwargs
     ) -> BaseConfig:
-        """註冊配置
-        
-        Args:
-            name: 配置名稱
-            config_class: 配置類
-            filename: 配置文件名(可選)
-            **kwargs: 傳遞給配置類的參數
-            
-        Returns:
-            配置實例
-            
-        Raises:
-            ConfigError: 註冊失敗時拋出
-        """
+        """註冊配置"""
         try:
-            # 構建配置文件路徑
-            config_path = self._get_config_path(filename or name)
-            
-            # 創建配置實例
-            config = config_class(
-                config_path=config_path,
-                **kwargs
-            )
-            
-            # 驗證配置
-            if self.validator:
-                self.validator.validate(config)
-            
-            # 保存配置
+            config_path = self._get_config_path(filename or f"{name}.json")
+            config = config_class(config_path=str(config_path), **kwargs)
             self.configs[name] = config
             return config
-            
         except Exception as e:
             raise ConfigError(f"註冊配置 {name} 失敗: {str(e)}")
     
@@ -143,28 +119,45 @@ class ConfigManager:
             logger.error(f"保存配置失敗: {str(e)}")
             return False
     
-    def load_config(self, name: str) -> bool:
+    def load_config(
+        self,
+        name: str,
+        env_prefix: str = None,
+        schema: Type[BaseModel] = None
+    ) -> Optional[BaseConfig]:
         """載入配置
         
         Args:
             name: 配置名稱
+            env_prefix: 環境變量前綴
+            schema: 配置模式
             
         Returns:
-            是否載入成功
+            配置實例
+            
+        Raises:
+            ConfigError: 載入失敗時拋出
         """
         try:
-            config = self.get_config(name)
-            config._load_config()
+            if name not in self.configs:
+                raise ConfigError(f"配置 {name} 不存在")
             
-            # 重新驗證
-            if self.validator:
-                self.validator.validate(config)
+            config = self.configs[name]
             
-            return True
+            # 設置環境變量前綴
+            if env_prefix:
+                config._env_prefix = env_prefix
+                config._load_env_vars()
+            
+            # 驗證配置模式
+            if schema:
+                schema.model_validate(config.to_dict())
+            
+            return config
             
         except Exception as e:
             logger.error(f"載入配置失敗: {str(e)}")
-            return False
+            raise ConfigError(f"載入配置失敗: {str(e)}")
     
     def reload_config(self, name: str) -> bool:
         """重新載入配置
@@ -207,11 +200,7 @@ class ConfigManager:
         return success
     
     def get_environment(self) -> str:
-        """獲取當前環境
-        
-        Returns:
-            環境名稱
-        """
+        """獲取當前環境"""
         return self.environment
     
     def set_environment(self, environment: str) -> None:
@@ -255,4 +244,6 @@ class ConfigManager:
         for name in self.configs:
             if not self.save_config(name):
                 success = False
-        return success 
+        return success
+
+config_manager = ConfigManager() 

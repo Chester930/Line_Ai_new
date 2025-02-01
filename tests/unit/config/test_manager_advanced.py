@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import json
 from typing import Dict, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from src.shared.config.manager import ConfigManager
 from src.shared.config.json_config import JSONConfig
@@ -14,6 +14,12 @@ class TestAppConfig(JSONConfig):
     app_name: str = Field(default="test_app")
     debug: bool = Field(default=False)
     port: int = Field(default=8000)
+
+    model_config = ConfigDict(
+        validate_assignment=True,
+        extra='allow',
+        arbitrary_types_allowed=True
+    )
 
 class TestAIConfig(JSONConfig):
     """測試用 AI 配置類"""

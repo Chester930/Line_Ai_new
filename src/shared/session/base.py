@@ -2,31 +2,37 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from uuid import UUID, uuid4
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 @dataclass
 class Message:
-    """消息類"""
+    """對話消息"""
     id: UUID
-    user_id: str
+    role: str
     content: str
-    timestamp: datetime
+    user_id: str
     type: str = "text"
-    metadata: Dict[str, Any] = None
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def __init__(
-        self,
+    @classmethod
+    def create(
+        cls,
         user_id: str,
         content: str,
+        role: str = "user",
         message_type: str = "text",
         metadata: Optional[Dict] = None
-    ):
-        self.id = uuid4()
-        self.user_id = user_id
-        self.content = content
-        self.type = message_type
-        self.timestamp = datetime.utcnow()
-        self.metadata = metadata or {}
+    ) -> "Message":
+        """創建消息實例"""
+        return cls(
+            id=uuid4(),
+            user_id=user_id,
+            role=role,
+            content=content,
+            type=message_type,
+            metadata=metadata or {}
+        )
 
 class Session:
     """會話類"""

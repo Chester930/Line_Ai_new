@@ -1,69 +1,122 @@
-from typing import Dict, List, Optional
+from typing import List, Dict, Optional, Any
 import anthropic
-from ...config.config import config
-from ..base import BaseAIModel, AIResponse
-from ...session.base import Message
-from ...utils.logger import logger
+from dataclasses import dataclass
+import logging
+from ...config.cag_config import ModelConfig
+from ..base import BaseAIModel, ModelResponse, ModelType, Message
+from ..factory import AIModelFactory
+from ...exceptions import ModelError
 
+logger = logging.getLogger(__name__)
+
+@dataclass
+class ClaudeConfig(ModelConfig):
+    """Claude 模型配置"""
+    model_name: str = "claude-3-opus-20240229"
+    max_retries: int = 3
+    request_timeout: int = 30
+
+@AIModelFactory.register(ModelType.CLAUDE)
 class ClaudeModel(BaseAIModel):
-    """Anthropic Claude 模型"""
+    """Claude 模型實現"""
     
-    def __init__(
-        self,
-        api_key: str,
-        model: str = "claude-3-sonnet",
-        **kwargs
-    ):
-        super().__init__(api_key, **kwargs)
-        self.model_name = model
-        self.client = anthropic.Anthropic(api_key=api_key)
+    def __init__(self, config: ClaudeConfig):
+        super().__init__(config.api_key)
+        self.config = config
+        self.name = "claude"
+        
+        # 初始化 Anthropic 客戶端
+        self.client = anthropic.AsyncAnthropic(api_key=config.api_key)
     
     async def generate(
         self,
-        messages: List[Message],
+        prompt: str,
+        context: Optional[List[Dict]] = None,
         **kwargs
-    ) -> AIResponse:
+    ) -> ModelResponse:
         """生成回應"""
         try:
-            # 轉換消息格式
-            formatted_msgs = []
-            for msg in messages:
-                role = "user" if msg.role == "user" else "assistant"
-                formatted_msgs.append({
-                    "role": role,
-                    "content": msg.content
-                })
+            # 準備系統提示詞
+            system_prompt = "You are Claude, a helpful AI assistant."
+            
+            # 準備消息列表
+            messages = []
+            if context:
+                for msg in context:
+                    messages.append({
+                        "role": msg["role"],
+                        "content": msg["content"]
+                    })
             
             # 生成回應
             response = await self.client.messages.create(
-                model=self.model_name,
-                messages=formatted_msgs,
+                model=self.config.model_name,
+                system=system_prompt,
+                messages=messages,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature,
+                timeout=self.config.request_timeout,
                 **kwargs
             )
             
-            return AIResponse(
-                content=response.content[0].text,
-                model=self.model_name,
-                usage=response.usage,
-                raw_response=response
+            # 構建回應對象
+            result = ModelResponse(
+                text=response.content[0].text,
+                usage={
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                    "total_tokens": (
+                        response.usage.input_tokens + 
+                        response.usage.output_tokens
+                    )
+                },
+                model_info={
+                    "model": self.config.model_name,
+                    "stop_reason": response.stop_reason,
+                    "stop_sequence": response.stop_sequence
+                }
             )
+            
+            return result
             
         except Exception as e:
             self._handle_error(e, "Claude 生成")
     
+    async def generate_stream(
+        self,
+        messages: List[Message],
+        **kwargs
+    ):
+        """流式生成回應"""
+        try:
+            formatted_messages = self._format_messages(messages)
+            response = await self.client.messages.create(
+                model=self.config.model_name,
+                messages=formatted_messages,
+                stream=True,
+                **kwargs
+            )
+            
+            async for chunk in response:
+                if chunk.delta.text:
+                    yield chunk.delta.text
+                    
+        except Exception as e:
+            self._handle_error(e, "Claude 流式生成")
+    
+    async def count_tokens(self, text: str) -> int:
+        """計算 token 數量"""
+        try:
+            result = await self.client.count_tokens(text)
+            return result.count
+        except Exception as e:
+            self._handle_error(e, "Claude token 計算")
+    
     async def validate(self) -> bool:
         """驗證模型配置"""
         try:
-            # 嘗試一個簡單的生成
-            response = await self.client.messages.create(
-                model=self.model_name,
-                messages=[{
-                    "role": "user",
-                    "content": "Test"
-                }]
-            )
-            return bool(response and response.content)
-            
+            response = await self.generate("Test")
+            return bool(response and response.text)
         except Exception as e:
             logger.error(f"Claude 驗證失敗: {str(e)}")
             return False
@@ -71,7 +124,7 @@ class ClaudeModel(BaseAIModel):
     def _initialize(self) -> None:
         """初始化 Claude 模型"""
         try:
-            self.model = self.model_name
+            self.model = self.config.model_name
         except Exception as e:
             logger.error(f"Claude 模型初始化失敗: {str(e)}")
             raise

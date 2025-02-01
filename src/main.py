@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .line.router import router as line_router
 from .shared.config import settings
 from .shared.utils.logger import logger
-from .shared.database.base import init_db
+from .shared.database.base import init_db, get_db
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
@@ -12,7 +12,7 @@ async def lifespan(app: FastAPI):
     # 啟動時執行
     logger.info("應用程序啟動中...")
     # 在這裡添加其他啟動時需要的初始化代碼
-    init_db()
+    db = init_db()
     yield
     # 關閉時執行
     logger.info("應用程序關閉中...")
@@ -37,6 +37,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    
+    # 初始化數據庫
+    db = init_db()
     
     # 註冊路由
     app.include_router(line_router, prefix="/line", tags=["LINE"])

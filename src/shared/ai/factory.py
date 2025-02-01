@@ -1,5 +1,5 @@
-from typing import Optional, Type
-from .base import BaseAIModel
+from typing import Optional, Type, Dict
+from .base import BaseAIModel, ModelType
 from .models.gemini import GeminiModel
 from .models.gpt import GPTModel
 from .models.claude import ClaudeModel
@@ -9,11 +9,24 @@ from ..utils.logger import logger
 class AIModelFactory:
     """AI 模型工廠"""
     
-    _models = {
-        "gemini": GeminiModel,
-        "gpt": GPTModel,
-        "claude": ClaudeModel
-    }
+    _models: Dict[ModelType, Type[BaseAIModel]] = {}
+    
+    @classmethod
+    def register(cls, model_type: ModelType):
+        """註冊模型類"""
+        def wrapper(model_class: Type[BaseAIModel]):
+            cls._models[model_type] = model_class
+            return model_class
+        return wrapper
+    
+    @classmethod
+    def create(cls, model_type: ModelType, **kwargs) -> BaseAIModel:
+        """創建模型實例"""
+        if model_type not in cls._models:
+            raise ValueError(f"Unsupported model type: {model_type}")
+            
+        model_class = cls._models[model_type]
+        return model_class(**kwargs)
     
     @classmethod
     def create_model(

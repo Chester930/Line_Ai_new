@@ -21,12 +21,10 @@ class AIResponse:
 
 @dataclass
 class ModelResponse:
-    """模型響應"""
-    content: str
-    role: str = "assistant"
-    model: str = "unknown"
-    usage: Optional[Dict[str, int]] = None
-    raw_response: Optional[Any] = None
+    """模型回應數據類"""
+    text: str
+    usage: Dict[str, int]
+    model_info: Optional[Dict] = None
 
 class BaseAIModel(ABC):
     """AI 模型基類"""
@@ -39,15 +37,30 @@ class BaseAIModel(ABC):
     @abstractmethod
     async def generate(
         self,
-        messages: List[Message],
+        prompt: str,
+        context: Optional[List[Dict]] = None,
         **kwargs
-    ) -> AIResponse:
+    ) -> ModelResponse:
         """生成回應"""
         pass
     
     @abstractmethod
     async def validate(self) -> bool:
         """驗證模型配置"""
+        pass
+    
+    @abstractmethod
+    async def generate_stream(
+        self,
+        messages: List[Message],
+        **kwargs
+    ):
+        """流式生成回應"""
+        pass
+    
+    @abstractmethod
+    async def count_tokens(self, text: str) -> int:
+        """計算 token 數量"""
         pass
     
     def _format_messages(
