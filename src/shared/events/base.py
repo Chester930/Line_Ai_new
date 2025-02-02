@@ -26,17 +26,17 @@ class BaseEvent:
 class EventHandler(ABC):
     """事件處理器基類"""
     
-    async def handle(self, event: BaseEvent) -> bool:
+    async def handle(self, event: BaseEvent) -> Any:
         """處理事件"""
         try:
             return await self._handle_event(event)
         except Exception as e:
             self._handle_error(event, e)
-            return False
+            return None
     
-    async def _handle_event(self, event: BaseEvent) -> bool:
+    async def _handle_event(self, event: BaseEvent) -> Any:
         """實際處理事件的邏輯"""
-        return True
+        return None
     
     def _handle_error(self, event: BaseEvent, error: Exception):
         """處理錯誤"""

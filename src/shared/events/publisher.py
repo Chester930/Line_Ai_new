@@ -1,4 +1,4 @@
-from typing import Dict, List, Type
+from typing import Dict, List, Type, Any
 from .base import BaseEvent, EventHandler
 from ..utils.logger import logger
 
@@ -38,13 +38,14 @@ class EventPublisher:
                 f"{handler.__class__.__name__}"
             )
     
-    async def publish(self, event: BaseEvent):
+    async def publish(self, event: BaseEvent) -> List[Any]:
         """發布事件"""
         handlers = self._handlers.get(event.event_type, [])
+        results = []
         
         if not handlers:
             logger.warning(f"沒有處理器訂閱事件: {event.event_type}")
-            return
+            return results
         
         logger.debug(
             f"發布事件 {event.event_type} "
@@ -53,13 +54,20 @@ class EventPublisher:
         
         for handler in handlers:
             try:
-                await handler.handle(event)
+                result = await handler.handle(event)
+                if result is not None:
+                    if isinstance(result, list):
+                        results.extend(result)
+                    else:
+                        results.append(result)
             except Exception as e:
                 logger.error(
                     f"事件處理失敗 {event.event_type} "
                     f"(Handler: {handler.__class__.__name__}): "
                     f"{str(e)}"
                 )
+        
+        return results
 
 # 創建全局事件發布器實例
 event_publisher = EventPublisher() 

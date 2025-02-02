@@ -25,15 +25,22 @@ class ConfigManager:
         return self._settings
 
     def __init__(self, config_dir: Union[str, Path] = None):
-        if not self._initialized:
-            self.base_path = Path(config_dir) if config_dir else Path("config")
-            self.configs = {}
-            self.validators = {}
-            self.environment = os.getenv("APP_ENV", "development")
-            self.validator = ConfigValidator()  # 添加默認驗證器
-            self._initialized = True
-            self._ensure_config_dir()
-    
+        self.base_path = Path(config_dir) if config_dir else Path("config")
+        self.environment = os.getenv("APP_ENV", "development")
+        self._settings = self._load_settings()
+        self.configs = {}
+        self.validators = {}
+        self._ensure_config_dir()
+        
+    def _load_settings(self) -> Any:
+        """載入設置"""
+        try:
+            from .config import Settings
+            return Settings()
+        except Exception as e:
+            logger.error(f"載入設置失敗: {str(e)}")
+            return None
+            
     def _ensure_config_dir(self) -> None:
         """確保配置目錄存在"""
         env_path = self.base_path / self.environment
@@ -201,7 +208,7 @@ class ConfigManager:
     
     def get_environment(self) -> str:
         """獲取當前環境"""
-        return self.environment
+        return os.getenv("APP_ENV", self.environment)
     
     def set_environment(self, environment: str) -> None:
         """設置環境
@@ -245,5 +252,30 @@ class ConfigManager:
             if not self.save_config(name):
                 success = False
         return success
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """獲取配置值"""
+        try:
+            # 優先從環境變量獲取
+            env_value = os.getenv(key)
+            if env_value is not None:
+                return env_value
+                
+            # 從設置中獲取
+            if self._settings and hasattr(self._settings, key):
+                return getattr(self._settings, key)
+                
+            return default
+            
+        except Exception as e:
+            logger.error(f"獲取配置失敗: {str(e)}")
+            return default
+            
+    def get_line_config(self) -> Dict:
+        """獲取 LINE 配置"""
+        return {
+            "channel_secret": self.get("LINE_CHANNEL_SECRET"),
+            "channel_access_token": self.get("LINE_CHANNEL_ACCESS_TOKEN")
+        }
 
 config_manager = ConfigManager() 

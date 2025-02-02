@@ -1,10 +1,8 @@
 from typing import Optional, Type, Dict
 from .base import BaseAIModel, ModelType
-from .models.gemini import GeminiModel
-from .models.gpt import GPTModel
-from .models.claude import ClaudeModel
 from ..config.manager import config_manager
 from ..utils.logger import logger
+from .models.gemini import GeminiModel
 
 class AIModelFactory:
     """AI 模型工廠"""
@@ -77,6 +75,28 @@ class AIModelFactory:
         """註冊新的模型類型"""
         cls._models[model_type] = model_class
         logger.info(f"已註冊新的模型類型: {model_type}")
+
+class ModelFactory:
+    """AI 模型工廠"""
+    
+    _models: Dict[str, Type[BaseAIModel]] = {
+        "gemini": GeminiModel
+    }
+    
+    @classmethod
+    def register_model(cls, name: str, model_class: Type[BaseAIModel]):
+        """註冊新的模型類型"""
+        cls._models[name] = model_class
+        logger.info(f"Registered new model type: {name}")
+    
+    @classmethod
+    def create_model(cls, model_type: str, config: dict) -> BaseAIModel:
+        """創建模型實例"""
+        if model_type not in cls._models:
+            raise ValueError(f"Unknown model type: {model_type}")
+            
+        model_class = cls._models[model_type]
+        return model_class(config)
 
 # 全局模型工廠實例
 model_factory = AIModelFactory() 

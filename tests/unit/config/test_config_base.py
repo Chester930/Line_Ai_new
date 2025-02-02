@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any
 import json
 from pathlib import Path
 import logging
+from src.shared.config.manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -201,4 +202,66 @@ def test_config_env_override():
     
     # 清理環境變量
     del os.environ["TEST_APP_NAME"]
-    del os.environ["TEST_PORT"] 
+    del os.environ["TEST_PORT"]
+
+@pytest.fixture
+def config_dir(tmp_path):
+    return tmp_path / "config"
+
+@pytest.fixture
+def config_manager(config_dir):
+    return ConfigManager(config_dir=config_dir)
+
+class TestConfigManager:
+    def test_environment_handling(self, config_manager, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "test")
+        assert config_manager.get_environment() == "test"
+        
+        config_manager.set_environment("development")
+        assert config_manager.environment == "development"
+        
+    def test_config_registration(self, config_manager):
+        class TestConfig(BaseConfig):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.data = {}
+                
+        config = config_manager.register_config(
+            "test",
+            TestConfig,
+            filename="test.json"
+        )
+        assert config is not None
+        assert "test" in config_manager.configs 
+
+def test_config_file_operations(tmp_path):
+    """測試配置文件操作"""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    
+    # 創建測試配置
+    config_data = {
+        "app": {
+            "name": "test_app",
+            "debug": True
+        },
+        "database": {
+            "url": "sqlite:///test.db"
+        }
+    }
+    
+    config_file = config_dir / "test.json"
+    config_file.write_text(json.dumps(config_data))
+    
+    # 測試載入配置
+    config = BaseConfig(config_path=str(config_file))
+    assert config.get("app.name") == "test_app"
+    assert config.get("database.url") == "sqlite:///test.db"
+    
+    # 測試保存配置
+    config.set("app.version", "1.0.0")
+    assert config.save()
+    
+    # 驗證保存的內容
+    saved_data = json.loads(config_file.read_text())
+    assert saved_data["app"]["version"] == "1.0.0" 

@@ -12,7 +12,7 @@ class Message:
     content: str
     user_id: str
     type: str = "text"
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=datetime.now)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -34,35 +34,76 @@ class Message:
             metadata=metadata or {}
         )
 
+@dataclass
+class AIResponse:
+    """AI 回應類"""
+    text: str
+    model: str
+    tokens: int
+    raw_response: Optional[Dict[str, Any]] = None
+    
+    @classmethod
+    def create(
+        cls,
+        text: str,
+        model: str,
+        tokens: int,
+        raw_response: Optional[Dict[str, Any]] = None
+    ) -> "AIResponse":
+        return cls(
+            text=text,
+            model=model,
+            tokens=tokens,
+            raw_response=raw_response
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "text": self.text,
+            "model": self.model,
+            "tokens": self.tokens,
+            "raw_response": self.raw_response
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AIResponse":
+        return cls(
+            text=data["text"],
+            model=data["model"],
+            tokens=data["tokens"],
+            raw_response=data.get("raw_response")
+        )
+
 class Session:
     """會話類"""
-    def __init__(
-        self,
-        session_id: str,
-        user_id: str,
-        ttl: int = 3600,
-        metadata: Optional[Dict] = None
-    ):
+    def __init__(self, session_id: str, user_id: str, **kwargs):
         self.id = session_id
         self.user_id = user_id
-        self.ttl = ttl
-        self.created_at = datetime.utcnow()
-        self.last_activity = datetime.utcnow()
+        self.created_at = datetime.now()
+        self.last_activity = datetime.now()
+        self.data: Dict = kwargs.get('data', {})
         self.messages: List[Message] = []
-        self.metadata = metadata or {}
+        self.ttl = int(kwargs.get('ttl', 3600))  # 確保 ttl 是整數
 
     def is_expired(self) -> bool:
         """檢查會話是否過期"""
-        return (datetime.utcnow() - self.last_activity).total_seconds() > self.ttl
+        if isinstance(self.last_activity, int):
+            # 如果是整數，假設是時間戳
+            last_activity = datetime.fromtimestamp(self.last_activity)
+        else:
+            last_activity = self.last_activity
+        
+        now = datetime.now()
+        return (now - last_activity).total_seconds() > self.ttl
 
-    def update_activity(self):
-        """更新最後活動時間"""
-        self.last_activity = datetime.utcnow()
-
-    def add_message(self, message: Message):
+    async def add_message(self, message: Message) -> bool:
         """添加消息到會話"""
-        self.messages.append(message)
-        self.update_activity()
+        try:
+            self.messages.append(message)
+            self.last_activity = datetime.now()
+            return True
+        except Exception:
+            return False
 
     def get_messages(
         self,
@@ -71,8 +112,15 @@ class Session:
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None
     ) -> List[Message]:
-        """獲取消息歷史"""
-        filtered_messages = self.messages
+        """獲取消息歷史
+        
+        Args:
+            limit: 限制返回的消息數量
+            message_type: 消息類型過濾
+            start_time: 開始時間（包含）
+            end_time: 結束時間（包含）
+        """
+        filtered_messages = self.messages.copy()
 
         if message_type:
             filtered_messages = [m for m in filtered_messages if m.type == message_type]
@@ -82,6 +130,9 @@ class Session:
 
         if end_time:
             filtered_messages = [m for m in filtered_messages if m.timestamp <= end_time]
+
+        # 按時間戳升序排序（從舊到新）
+        filtered_messages.sort(key=lambda x: x.timestamp, reverse=False)
 
         if limit:
             filtered_messages = filtered_messages[-limit:]
@@ -94,11 +145,11 @@ class Session:
 
     def update_metadata(self, metadata: Dict[str, Any]):
         """更新元數據"""
-        self.metadata.update(metadata)
+        self.data.update(metadata)
 
     def remove_metadata(self, key: str):
         """移除指定的元數據"""
-        self.metadata.pop(key, None)
+        self.data.pop(key, None)
 
     def to_dict(self) -> Dict:
         """將會話轉換為字典格式"""
@@ -108,7 +159,7 @@ class Session:
             "created_at": self.created_at.isoformat(),
             "last_activity": self.last_activity.isoformat(),
             "ttl": self.ttl,
-            "metadata": self.metadata,
+            "data": self.data,
             "messages": [
                 {
                     "id": str(msg.id),
@@ -121,6 +172,20 @@ class Session:
                 for msg in self.messages
             ]
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Session":
+        """從字典創建會話"""
+        session = cls(data["id"], data["user_id"])
+        session.messages = [Message(**msg) for msg in data["messages"]]
+        session.created_at = datetime.fromisoformat(data["created_at"])
+        session.last_activity = datetime.fromisoformat(data["last_activity"])
+        session.data = data["data"]
+        return session
+
+    def update_activity(self):
+        """更新最後活動時間"""
+        self.last_activity = datetime.now()
 
 class BaseSessionManager(ABC):
     """會話管理器基類"""

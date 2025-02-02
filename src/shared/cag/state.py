@@ -1,7 +1,8 @@
 from typing import Dict, Any, Optional, List
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from copy import deepcopy
 
 class DialogueState(Enum):
     """對話狀態枚舉"""
@@ -16,36 +17,44 @@ class DialogueState(Enum):
 class StateData:
     """狀態數據類"""
     state: DialogueState
-    metadata: Dict[str, Any]
-    updated_at: datetime
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    updated_at: datetime = field(default_factory=datetime.now)
+    
+    def __post_init__(self):
+        """初始化後處理"""
+        # 確保元數據是不可變的
+        self.metadata = deepcopy(self.metadata)
 
 class StateTracker:
     """狀態追蹤器"""
     def __init__(self):
-        self.current_state: Optional[StateData] = None
-        self.state_history: List[StateData] = []
+        self._current_state: Optional[StateData] = None
+        self._state_history: List[StateData] = []
     
     async def set_state(
-        self, 
-        state: DialogueState, 
+        self,
+        state: DialogueState,
         metadata: Optional[Dict[str, Any]] = None
     ) -> None:
         """設置當前狀態"""
+        # 創建新的狀態數據
         state_data = StateData(
             state=state,
             metadata=metadata or {},
             updated_at=datetime.now()
         )
         
-        if self.current_state:
-            self.state_history.append(self.current_state)
+        # 保存當前狀態到歷史
+        if self._current_state:
+            self._state_history.append(self._current_state)
         
-        self.current_state = state_data
+        # 更新當前狀態
+        self._current_state = state_data
     
     async def get_current_state(self) -> Optional[StateData]:
         """獲取當前狀態"""
-        return self.current_state
+        return deepcopy(self._current_state) if self._current_state else None
     
     async def get_state_history(self) -> List[StateData]:
         """獲取狀態歷史"""
-        return self.state_history 
+        return deepcopy(self._state_history) 

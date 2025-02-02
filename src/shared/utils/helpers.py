@@ -5,12 +5,13 @@ from typing import Any, Dict, Optional
 from datetime import datetime, timezone, date
 from pathlib import Path
 from uuid import UUID
+import uuid
 
-def generate_session_id(user_id: str) -> str:
-    """生成會話 ID"""
-    timestamp = datetime.now(timezone.utc).isoformat()
-    data = f"{user_id}:{timestamp}"
-    return f"sess_{hashlib.sha256(data.encode()).hexdigest()[:12]}"
+def generate_session_id() -> str:
+    """生成唯一的會話 ID"""
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    unique_id = str(uuid.uuid4())[:8]
+    return f"session_{timestamp}_{unique_id}"
 
 def safe_json_loads(data: str) -> Dict:
     """安全的 JSON 解析"""

@@ -8,6 +8,7 @@ from src.shared.config.json_config import JSONConfig
 from src.shared.config.validator import ConfigValidator, ValidationRule
 from src.shared.config.base import ConfigError
 from pydantic import Field, ConfigDict
+import os
 
 class TestConfig(JSONConfig):
     """測試用配置類"""
@@ -394,4 +395,83 @@ def test_validate_config_schema(config_dir):
     
     # 應該拋出驗證錯誤
     with pytest.raises(Exception):
-        manager.load_config("invalid", schema=Config) 
+        manager.load_config("invalid", schema=Config)
+
+def test_config_manager_environment(tmp_path):
+    """測試配置管理器環境處理"""
+    config_dir = tmp_path / "config"
+    manager = ConfigManager(config_dir=config_dir)
+    
+    # 測試環境變量覆蓋
+    os.environ["TEST_KEY"] = "env_value"
+    assert manager.get("TEST_KEY") == "env_value"
+    
+    # 測試默認值
+    assert manager.get("NON_EXISTENT", "default") == "default"
+
+def test_environment_handling(config_manager, monkeypatch):
+    """測試環境處理"""
+    # 測試默認環境
+    assert config_manager.get_environment() == "development"
+    
+    # 測試通過環境變量設置環境
+    monkeypatch.setenv("APP_ENV", "production")
+    assert config_manager.get_environment() == "production"
+    
+    # 測試手動設置環境
+    config_manager.set_environment("test")
+    assert config_manager.environment == "test"
+    assert config_manager.get_environment() == "test"
+
+def test_config_load_error(config_manager, tmp_path):
+    """測試配置加載錯誤"""
+    # 創建無效的配置文件
+    invalid_file = tmp_path / "invalid.json"
+    invalid_file.write_text("{invalid json")
+    
+    config = config_manager.register_config(
+        "test",
+        TestConfig,
+        filename=str(invalid_file)
+    )
+    
+    # 應該使用默認值
+    assert config.api_key is None
+    assert config.port == 8000
+    assert config.debug is False
+
+def test_config_save_error(config_manager, tmp_path):
+    """測試配置保存錯誤"""
+    # 創建只讀目錄
+    readonly_dir = tmp_path / "readonly"
+    readonly_dir.mkdir()
+    if os.name != 'nt':  # 非 Windows 系統
+        readonly_dir.chmod(0o444)  # 設置為只讀
+        
+        config = config_manager.register_config(
+            "test",
+            TestConfig,
+            filename=str(readonly_dir / "config.json")
+        )
+        
+        # 應該返回 False 而不是拋出異常
+        assert not config.save()
+
+def test_config_validation_error(config_manager):
+    """測試配置驗證錯誤"""
+    validator = ConfigValidator()
+    validator.add_rule(
+        ValidationRule("api_key")
+        .required()
+        .custom("API金鑰不能為空", lambda x: bool(x))
+    )
+    
+    config = config_manager.register_config(
+        "test",
+        TestConfig,
+        validator=validator
+    )
+    
+    # 驗證應該失敗
+    with pytest.raises(ConfigError):
+        config_manager.validate_config("test") 

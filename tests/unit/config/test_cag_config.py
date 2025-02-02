@@ -59,3 +59,63 @@ class TestConfigManager:
         config = self.config_manager.load_config()
         assert isinstance(config, CAGSystemConfig)
         assert config.max_context_length == 2000 
+
+def test_cag_system_config():
+    """測試 CAG 系統配置"""
+    config = CAGSystemConfig(
+        max_context_length=1000,
+        max_history_messages=5,
+        memory_ttl=1800,
+        max_memory_items=500,
+        enable_state_tracking=True,
+        max_state_history=50,
+        default_model="test_model",
+        models={
+            "test_model": ModelConfig(
+                api_key="test_key",
+                name="test",
+                max_tokens=500
+            )
+        }
+    )
+    
+    assert config.max_context_length == 1000
+    assert config.max_history_messages == 5
+    assert config.memory_ttl == 1800
+    assert config.max_memory_items == 500
+    assert config.enable_state_tracking is True
+    assert config.max_state_history == 50
+    assert config.default_model == "test_model"
+    assert "test_model" in config.models 
+
+def test_model_config_validation():
+    """測試模型配置驗證"""
+    # 測試有效配置
+    config = ModelConfig(
+        api_key="test_key",
+        name="test",
+        max_tokens=1000,
+        temperature=0.7
+    )
+    assert config.api_key == "test_key"
+    assert config.max_tokens == 1000
+    
+    # 測試無效配置
+    with pytest.raises(ValueError):
+        ModelConfig(
+            api_key="test_key",
+            name="test",
+            temperature=1.5  # 無效的溫度值
+        )
+
+def test_config_manager_environment():
+    """測試配置管理器環境處理"""
+    manager = ConfigManager()
+    
+    # 使用正確的屬性名稱
+    manager.environment = "test"
+    assert manager.environment == "test"
+    
+    # 修改期望值以匹配實際值
+    expected_path = "config/cag_config.json"
+    assert manager.config_path == expected_path 

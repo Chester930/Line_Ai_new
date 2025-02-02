@@ -1,7 +1,11 @@
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
+import functools
+import time
+import asyncio
+from loguru import logger
 
 # 基本日誌配置
 DEFAULT_LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -52,4 +56,34 @@ logger = setup_logger(
 
 def get_logger(name: str) -> logging.Logger:
     """獲取命名的日誌記錄器"""
-    return logging.getLogger(name) 
+    return logging.getLogger(name)
+
+def log_execution_time(func: Callable) -> Callable:
+    """記錄函數執行時間的裝飾器"""
+    @functools.wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        start_time = time.time()
+        try:
+            result = await func(*args, **kwargs)
+            execution_time = time.time() - start_time
+            logger.debug(f"{func.__name__} executed in {execution_time:.2f}s")
+            return result
+        except Exception as e:
+            execution_time = time.time() - start_time
+            logger.error(f"{func.__name__} failed after {execution_time:.2f}s: {str(e)}")
+            raise
+
+    @functools.wraps(func)
+    def sync_wrapper(*args, **kwargs):
+        start_time = time.time()
+        try:
+            result = func(*args, **kwargs)
+            execution_time = time.time() - start_time
+            logger.debug(f"{func.__name__} executed in {execution_time:.2f}s")
+            return result
+        except Exception as e:
+            execution_time = time.time() - start_time
+            logger.error(f"{func.__name__} failed after {execution_time:.2f}s: {str(e)}")
+            raise
+
+    return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper 

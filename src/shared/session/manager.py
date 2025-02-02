@@ -8,7 +8,8 @@ from ..utils.helpers import generate_session_id
 class SessionManager(BaseSessionManager):
     """會話管理器實現"""
     
-    def __init__(self):
+    def __init__(self, config: dict):
+        self.config = config
         self.sessions: Dict[str, Session] = {}
         self._cleanup_task = None
     
@@ -25,29 +26,26 @@ class SessionManager(BaseSessionManager):
             except asyncio.CancelledError:
                 pass
     
-    async def create_session(
-        self,
-        user_id: str,
-        ttl: int = 3600,
-        metadata: Optional[Dict] = None
-    ) -> Session:
+    async def create_session(self, user_id: str, **kwargs) -> Session:
         """創建新會話"""
+        session_id = generate_session_id()  # 需要實現這個輔助函數
         session = Session(
-            session_id=str(uuid4()),
+            session_id=session_id,
             user_id=user_id,
-            ttl=ttl,
-            metadata=metadata
+            **kwargs
         )
-        self.sessions[session.id] = session
+        self.sessions[session_id] = session
         logger.info(f"Created new session {session.id} for user {user_id}")
         return session
     
     async def get_session(self, session_id: str) -> Optional[Session]:
         """獲取會話"""
         session = self.sessions.get(session_id)
-        if session and session.is_expired():
-            await self.delete_session(session_id)
-            return None
+        if session:
+            if session.is_expired():
+                await self.delete_session(session_id)
+                return None
+            session.update_activity()  # 更新活動時間
         return session
     
     async def update_session(self, session: Session) -> bool:
@@ -117,4 +115,11 @@ class SessionManager(BaseSessionManager):
             
         except Exception as e:
             logger.error(f"關閉會話失敗: {str(e)}")
-            return False 
+            return False
+    
+    async def remove_session(self, session_id: str) -> bool:
+        """移除會話"""
+        if session_id in self.sessions:
+            del self.sessions[session_id]
+            return True
+        return False 

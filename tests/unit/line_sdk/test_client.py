@@ -87,3 +87,9 @@ def test_parse_webhook_body(line_client):
         body = b"test_body"
         result = line_client.parse_webhook_body(body)
         assert result == expected_result
+
+@pytest.mark.asyncio
+async def test_line_client():
+    """測試 LINE 客戶端"""
+    client = LineClient(channel_access_token="test_token")
+    assert client.channel_access_token == "test_token"

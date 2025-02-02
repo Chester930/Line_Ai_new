@@ -3,6 +3,9 @@ from .base import Session
 from .memory import MemorySessionManager
 from ..utils.logger import logger
 
+# 添加 SessionManager 導入
+from .manager import SessionManager  # 需要先創建這個文件
+
 class SessionFactory:
     """會話工廠類"""
     _managers: Dict[str, Type[Session]] = {
@@ -49,3 +52,10 @@ class SessionFactory:
             logger.error(f"創建會話管理器失敗: {str(e)}")
             # 默認使用記憶體管理器
             return MemorySessionManager()
+
+class SessionManagerFactory:
+    """會話管理器工廠"""
+    @staticmethod
+    def create(config: dict) -> SessionManager:
+        """創建會話管理器實例"""
+        return SessionManager(config)

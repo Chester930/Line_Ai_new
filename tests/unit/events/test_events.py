@@ -8,11 +8,11 @@ from src.shared.events.types import (
     SystemEvent,
     ErrorEvent
 )
+from typing import Any
 
 class TestEventHandler(EventHandler):
     """測試事件處理器"""
-    def __init__(self):
-        self.handled_events = []
+    handled_events = []
     
     async def _handle_event(self, event: BaseEvent) -> bool:
         self.handled_events.append(event)
@@ -27,6 +27,11 @@ def event_publisher():
 def event_handler():
     """事件處理器"""
     return TestEventHandler()
+
+@pytest.fixture(autouse=True)
+def clear_handled_events():
+    TestEventHandler.handled_events = []
+    yield
 
 @pytest.mark.asyncio
 async def test_event_publishing(event_publisher, event_handler):
@@ -51,21 +56,32 @@ async def test_event_publishing(event_publisher, event_handler):
 @pytest.mark.asyncio
 async def test_multiple_handlers(event_publisher):
     """測試多個處理器"""
-    handler1 = TestEventHandler()
-    handler2 = TestEventHandler()
+    # 每個處理器使用獨立的事件列表
+    class Handler1(EventHandler):
+        def __init__(self):
+            self.handled_events = []
+            
+        async def _handle_event(self, event):
+            self.handled_events.append(event)
+            return True
+            
+    class Handler2(EventHandler):
+        def __init__(self):
+            self.handled_events = []
+            
+        async def _handle_event(self, event):
+            self.handled_events.append(event)
+            return True
     
-    # 訂閱相同事件
+    handler1 = Handler1()
+    handler2 = Handler2()
+    
     event_publisher.subscribe("user", handler1)
     event_publisher.subscribe("user", handler2)
     
-    # 發布事件
-    event = UserEvent(
-        user_id="test_user",
-        action="login"
-    )
+    event = UserEvent(user_id="test_user", action="login")
     await event_publisher.publish(event)
     
-    # 驗證兩個處理器都收到事件
     assert len(handler1.handled_events) == 1
     assert len(handler2.handled_events) == 1
 
@@ -108,3 +124,30 @@ async def test_event_unsubscribe(event_publisher, event_handler):
     event2 = BaseEvent(event_type="test")
     await event_publisher.publish(event2)
     assert len(event_handler.handled_events) == 1  # 仍然是1 
+
+@pytest.mark.asyncio
+async def test_event_handling():
+    """測試事件處理"""
+    class TestEvent(BaseEvent):
+        def __init__(self, data):
+            super().__init__(event_type="test")
+            self.data = data
+            
+    class TestHandler(EventHandler):
+        async def _handle_event(self, event: BaseEvent) -> str:
+            return f"Handled: {event.data}"
+            
+    publisher = EventPublisher()
+    handler = TestHandler()
+    
+    # 訂閱事件
+    publisher.subscribe("test", handler)
+    
+    # 發布事件
+    event = TestEvent("test_data")
+    results = await publisher.publish(event)
+    
+    # 檢查結果
+    assert isinstance(results, list)
+    assert len(results) == 1
+    assert results[0] == "Handled: test_data" 

@@ -3,12 +3,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from src.shared.database.base import Database, Base
-from src.shared.config.config import config
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, String
 
 @pytest.fixture
 def db():
     """數據庫測試夾具"""
     database = Database()
+    database.create_tables()  # 確保表已創建
     return database
 
 @pytest.fixture
@@ -17,13 +19,14 @@ def db_session(db):
     session = next(db.get_session())
     try:
         yield session
+        session.commit()  # 提交更改
     finally:
         session.close()
 
 def test_database_connection(db):
     """測試數據庫連接"""
-    assert db.engine is not None
-    assert db.SessionLocal is not None
+    assert db._engine is not None
+    assert db._session_factory is not None  # 使用正確的屬性名稱
 
 def test_session_management(db):
     """測試會話管理"""
@@ -38,7 +41,7 @@ def test_database_initialization(db):
     assert db is db2
     
     # 測試初始化狀態
-    assert db.initialized is True
+    assert db._initialized is True
     assert isinstance(db, Database)
     
     # 測試創建表
@@ -73,3 +76,40 @@ def test_session_rollback(db_session):
     except Exception:
         db_session.rollback()
         assert db_session.is_active 
+
+@pytest.mark.asyncio
+async def test_database_operations(db_session):
+    """測試數據庫操作"""
+    # 創建測試模型
+    class TestModel(Base):
+        __tablename__ = 'test_model'
+        __table_args__ = {'extend_existing': True}
+        
+        id = Column(String, primary_key=True)
+        data = Column(String)
+        
+        def __init__(self, id, data):
+            self.id = id
+            self.data = data
+    
+    # 清理現有表
+    TestModel.__table__.drop(bind=db_session.bind, checkfirst=True)
+    
+    # 創建表
+    TestModel.__table__.create(bind=db_session.bind, checkfirst=True)
+    
+    try:
+        # 使用同步方式操作
+        model = TestModel("test_id", "test_data")
+        db_session.add(model)
+        db_session.commit()
+        
+        # 測試查詢
+        result = db_session.query(TestModel).filter_by(id="test_id").first()
+        assert result.id == "test_id"
+        assert result.data == "test_data"
+        
+    finally:
+        # 清理
+        db_session.rollback()
+        TestModel.__table__.drop(bind=db_session.bind, checkfirst=True) 

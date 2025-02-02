@@ -8,12 +8,26 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ModelConfig:
-    """模型配置"""
-    name: str
-    api_key: str
+    """模型配置基類"""
+    api_key: str  # 必需參數放在前面
+    name: str = "base"  # 可選參數放在後面
+    model_name: str = "base"
+    safety_settings: Optional[Dict] = None
+    generation_config: Optional[Dict] = None
     max_tokens: int = 1000
     temperature: float = 0.7
+    top_p: float = 0.95
+    top_k: int = 40
     timeout: int = 30
+
+    def __post_init__(self):
+        """初始化後的驗證"""
+        if self.temperature < 0 or self.temperature > 1:
+            raise ValueError("Temperature must be between 0 and 1")
+        if self.top_p < 0 or self.top_p > 1:
+            raise ValueError("Top_p must be between 0 and 1")
+        if self.max_tokens < 1:
+            raise ValueError("Max_tokens must be greater than 0")
 
 @dataclass
 class CAGSystemConfig:

@@ -1,4 +1,4 @@
-from typing import Dict, Type, Optional, List, Set
+from typing import Dict, Type, Optional, List, Set, Any, Union
 from .base import BasePlugin, PluginConfig, PluginError
 import logging
 import importlib
@@ -8,6 +8,7 @@ import asyncio
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import sys
+import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,11 @@ class PluginManager:
     """插件管理器"""
     
     def __init__(self):
-        self._plugins: Dict[str, BasePlugin] = {}
+        self._plugins: Dict[str, Any] = {}
         self._plugin_classes: Dict[str, Type[BasePlugin]] = {}
         self._observer: Optional[Observer] = None
         self._watched_paths: Set[str] = set()
+        self._watch_task: Optional[asyncio.Task] = None
     
     async def start_watching(self, plugins_dir: str) -> None:
         """開始監視插件目錄"""

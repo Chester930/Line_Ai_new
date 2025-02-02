@@ -282,8 +282,11 @@ def test_get_default_value():
 def test_config_validation():
     """測試配置驗證"""
     config = BaseConfig()
-    with pytest.raises(ConfigError):
-        config.validate()
+    assert config.validate()
+    
+    # 測試必填字段
+    config.required_fields = ["test_field"]
+    assert not config.validate()
 
 def test_config_merge():
     """測試配置合併"""

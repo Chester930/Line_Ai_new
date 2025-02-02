@@ -12,6 +12,8 @@ class Context:
     
 class ContextManager:
     """上下文管理器"""
+    VALID_ROLES = {"user", "assistant", "system"}  # 添加有效角色集合
+    
     def __init__(self, max_context_length: int = 2000):
         self.max_context_length = max_context_length
         self.current_context: Optional[Context] = None
@@ -29,6 +31,14 @@ class ContextManager:
     
     async def add_message(self, role: str, content: str) -> None:
         """添加消息到上下文"""
+        # 驗證角色
+        if role not in self.VALID_ROLES:
+            raise ValueError(f"無效的角色: {role}. 有效角色為: {', '.join(self.VALID_ROLES)}")
+        
+        # 驗證內容
+        if not content or not content.strip():
+            raise ValueError("消息內容不能為空")
+            
         if not self.current_context:
             await self.create_context()
             
