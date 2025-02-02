@@ -195,4 +195,18 @@ class PluginManager:
     
     def list_plugins(self) -> List[str]:
         """列出所有已載入的插件"""
-        return list(self._plugins.keys()) 
+        return list(self._plugins.keys())
+    
+    async def process(self, message: str) -> Dict[str, Any]:
+        """處理消息"""
+        results = {}
+        for plugin_name, plugin in self._plugins.items():
+            try:
+                if plugin.is_enabled():
+                    result = await plugin.execute({
+                        "message": message
+                    })
+                    results[plugin_name] = result
+            except Exception as e:
+                self.logger.error(f"插件 {plugin_name} 執行失敗: {str(e)}")
+        return results 

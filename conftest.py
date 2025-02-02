@@ -3,11 +3,14 @@ import sys
 import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
+from typing import Dict, Any
 
 # 只導入測試需要的組件
 from src.shared.cag.context import ContextManager
 from src.shared.cag.memory import MemoryPool
 from src.shared.cag.state import StateTracker
+from src.shared.ai.models.gemini import GeminiConfig
+from src.shared.cag.coordinator import CAGCoordinator
 
 @pytest.fixture(autouse=True)
 def setup_test_env(tmp_path):
@@ -39,4 +42,42 @@ def memory_pool():
 @pytest.fixture
 def state_tracker():
     """狀態追蹤器"""
-    return StateTracker() 
+    return StateTracker()
+
+@pytest.fixture
+async def coordinator():
+    """共用的 CAG 協調器 fixture"""
+    coordinator = await CAGCoordinator.create()
+    try:
+        yield coordinator
+    finally:
+        await coordinator.stop()
+        if hasattr(coordinator, 'model'):
+            await coordinator.model.client.close()
+
+@pytest.fixture
+def mock_plugin_manager():
+    """Mock 插件管理器"""
+    class MockPluginManager:
+        def __init__(self):
+            self._plugins = {}
+            
+        async def process(self, message: str) -> Dict[str, Any]:
+            return {"test_plugin": {"result": "test"}}
+            
+        async def start_watching(self, *args):
+            pass
+            
+        async def stop_watching(self):
+            pass
+            
+        async def cleanup_plugins(self):
+            pass
+            
+        async def load_plugins(self):
+            pass
+            
+        async def initialize_plugin(self, name: str, config: Any):
+            pass
+    
+    return MockPluginManager() 

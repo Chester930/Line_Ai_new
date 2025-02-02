@@ -9,17 +9,24 @@ from ..base import BaseAIModel, ModelResponse, ModelType, Message
 from ...session.base import AIResponse
 
 @dataclass
-class GeminiConfig(ModelConfig):
+class GeminiConfig:
     """Gemini 模型配置"""
-    api_key: str  # 必需參數
-    name: str = "gemini"  # 覆蓋父類默認值
-    model_name: str = "gemini-pro"  # 覆蓋父類默認值
-    safety_settings: Optional[Dict] = None
-    generation_config: Optional[Dict] = None
+    api_key: str
+    name: str = "gemini"
+    model_name: str = "gemini-pro"
     max_tokens: int = 1000
     temperature: float = 0.7
     top_p: float = 0.95
     top_k: int = 40
+    
+    def __post_init__(self):
+        """驗證配置參數"""
+        if self.temperature < 0 or self.temperature > 1:
+            raise ValueError("Temperature must be between 0 and 1")
+        if self.top_p < 0 or self.top_p > 1:
+            raise ValueError("Top_p must be between 0 and 1")
+        if self.max_tokens < 1:
+            raise ValueError("Max_tokens must be greater than 0")
 
 class GeminiModel(BaseAIModel):
     """Gemini 模型實現"""

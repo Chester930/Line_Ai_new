@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 import logging
 from .context import ContextManager
@@ -14,6 +14,8 @@ from ..session.manager import SessionManager
 from ..session.base import Message
 from ..plugins.manager import PluginManager
 from ..plugins.base import PluginConfig
+from ..rag.system import RAGSystem
+from ..events.system import EventSystem
 
 logger = logging.getLogger(__name__)
 
@@ -32,36 +34,49 @@ class CAGCoordinator:
         plugins_config_path: str = "config/plugins_config.json",
         plugins_dir: str = "plugins"
     ):
+        # 保存配置路徑
+        self.config_path = config_path
+        self.plugins_config_path = plugins_config_path
+        self.plugins_dir = plugins_dir
+        
+        # 初始化 logger
+        self.logger = logging.getLogger(__name__)
+    
+    @classmethod
+    async def create(
+        cls,
+        config_path: Optional[str] = None,
+        plugins_config_path: str = "config/plugins_config.json",
+        plugins_dir: str = "plugins"
+    ) -> "CAGCoordinator":
+        """創建協調器實例"""
+        coordinator = cls(config_path, plugins_config_path, plugins_dir)
+        await coordinator.initialize()
+        return coordinator
+        
+    async def initialize(self):
+        """初始化協調器"""
         # 初始化配置管理器
-        self.config_manager = ConfigManager(config_path)
+        self.config_manager = ConfigManager(self.config_path)
         self.system_config = self.config_manager.load_config()
         
-        # 初始化日誌管理器
-        self.logger = LogManager(
-            log_level=self.system_config.log_level
-        ).logger
-        
-        # 初始化 Gemini 模型
-        model_config = GeminiConfig(**self.system_config.models["gemini"].__dict__)
-        self.model = GeminiModel(model_config)
-        
-        # 初始化其他組件
+        # 初始化核心組件
         self.context_manager = ContextManager(
             max_context_length=self.system_config.max_context_length
         )
         self.memory_pool = MemoryPool()
         self.state_tracker = StateTracker()
+        self.rag_system = RAGSystem()
+        self.event_system = EventSystem()
+        
+        # 初始化 AI 模型
+        model_config = GeminiConfig(**self.system_config.models["gemini"].__dict__)
+        self.model = GeminiModel(model_config)
         self.generator = ResponseGenerator(self.model)
         
-        # 初始化會話管理器
-        self.session_manager = SessionManager()
-        
-        # 初始化插件管理器
+        # 初始化插件系統
         self.plugin_manager = PluginManager()
-        self._load_plugins(plugins_config_path)
-        
-        # 啟動插件監視
-        self.plugins_dir = plugins_dir
+        await self._load_plugins(self.plugins_config_path)
         
     async def _load_plugins(self, config_path: str) -> None:
         """載入插件配置並初始化插件"""
@@ -76,12 +91,17 @@ class CAGCoordinator:
             # 初始化已啟用的插件
             for name, config in plugin_configs["plugins"].items():
                 if config.get("enabled", True):
-                    plugin_config = PluginConfig(
-                        name=name,
-                        version=config["version"],
-                        settings=config.get("settings")
-                    )
-                    await self.plugin_manager.initialize_plugin(name, plugin_config)
+                    try:
+                        plugin_config = PluginConfig(
+                            name=name,
+                            version=config["version"],
+                            settings=config.get("settings")
+                        )
+                        await self.plugin_manager.initialize_plugin(name, plugin_config)
+                    except PluginError as e:
+                        # 忽略未找到的插件
+                        self.logger.warning(f"跳過插件 {name}: {str(e)}")
+                        continue
                     
             self.logger.info("插件系統初始化完成")
             
@@ -103,101 +123,94 @@ class CAGCoordinator:
     
     async def start(self):
         """啟動協調器"""
-        await self.session_manager.start()
+        # 移除 session_manager 相關代碼
         await self.plugin_manager.start_watching(self.plugins_dir)
+        self.logger.info("CAG Coordinator started")
     
     async def stop(self):
         """停止協調器"""
-        await self.session_manager.stop()
+        # 移除 session_manager 相關代碼
         await self.plugin_manager.stop_watching()
         await self.plugin_manager.cleanup_plugins()
+        self.logger.info("CAG Coordinator stopped")
     
-    async def process_message(
-        self,
-        message: str,
-        user_id: str,
-        session_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> GenerationResult:
+    async def process_message(self, message: str, context: Dict[str, Any]) -> str:
         """處理用戶消息"""
         try:
-            # 獲取或創建會話
-            session = None
-            if session_id:
-                session = await self.session_manager.get_session(session_id)
-            if not session:
-                session = await self.session_manager.create_session(user_id)
-                session_id = session.id
-            
-            # 創建消息對象
-            message_obj = Message.create(
-                user_id=user_id,
-                content=message,
-                role="user",
-                metadata=metadata
-            )
-            
-            # 添加消息到會話
-            session.add_message(message_obj)
-            
-            # 記錄請求信息
-            self.logger.info(f"Processing message from user {user_id}")
-            self.logger.debug(f"Message content: {message}")
-            if metadata:
-                self.logger.debug(f"Message metadata: {json.dumps(metadata)}")
-            
             # 1. 更新狀態
             await self.state_tracker.set_state(
                 DialogueState.PROCESSING,
-                metadata={"user_id": user_id}
+                {"message": message}
             )
             
-            # 2. 獲取相關記憶
-            context_memory = await self.memory_pool.get_memory(
-                f"context_{user_id}"
+            # 2. RAG 知識檢索
+            relevant_docs = await self.rag_system.retrieve(message)
+            
+            # 3. 插件處理
+            plugin_results = await self.plugin_manager.process(message)
+            
+            # 4. 生成回應
+            response = await self.generate_response(
+                message,
+                context,
+                relevant_docs,
+                plugin_results
             )
             
-            # 檢查是否需要調用插件
-            if metadata and "plugin" in metadata:
-                plugin_result = await self.execute_plugin(
-                    metadata["plugin"],
-                    {
-                        "message": message,
-                        "user_id": user_id,
-                        **metadata.get("plugin_context", {})
-                    }
-                )
-                
-                # 將插件結果添加到上下文
-                context_memory["plugin_result"] = plugin_result
-            
-            # 3. 生成回應
-            result = await self.generator.generate(
-                prompt=message,
-                context=context_memory
+            # 5. 事件追蹤
+            await self.event_system.track(
+                "response_generated",
+                {"message": message, "response": response}
             )
             
-            # 4. 更新記憶
-            await self.memory_pool.add_memory(
-                f"context_{user_id}",
-                self.context_manager.current_context.messages,
-                ttl=self.system_config.memory_ttl
-            )
-            
-            # 5. 更新狀態
+            # 6. 更新狀態
             await self.state_tracker.set_state(
                 DialogueState.ACTIVE,
-                metadata={
-                    "user_id": user_id,
-                    "last_response": result.content
-                }
+                {"response": response}
             )
             
-            # 更新會話
-            await self.session_manager.update_session(session)
-            
-            return result
+            return response
             
         except Exception as e:
-            self.logger.error(f"Error processing message: {str(e)}", exc_info=True)
-            raise 
+            await self.state_tracker.set_state(
+                DialogueState.ERROR,
+                {"error": str(e)}
+            )
+            raise CAGError(f"處理消息失敗: {str(e)}")
+    
+    async def generate_response(
+        self,
+        message: str,
+        context: Dict[str, Any],
+        relevant_docs: List[str],
+        plugin_results: Dict[str, Any]
+    ) -> str:
+        """生成回應"""
+        try:
+            # 構建生成上下文
+            generation_context = {
+                "message": message,
+                "context": context,
+                "relevant_docs": relevant_docs,
+                "plugin_results": plugin_results
+            }
+            
+            # 生成回應
+            result = await self.generator.generate(
+                prompt=message,
+                context=generation_context
+            )
+            
+            # 更新記憶
+            if context.get("user_id"):
+                await self.memory_pool.add_memory(
+                    f"context_{context['user_id']}",
+                    self.context_manager.current_context.messages,
+                    ttl=self.system_config.memory_ttl
+                )
+            
+            return result.content
+            
+        except Exception as e:
+            self.logger.error(f"生成回應失敗: {str(e)}")
+            raise CAGError(f"生成回應失敗: {str(e)}") 
