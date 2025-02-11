@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "dev": "vite -- --api-base http://localhost:8000",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  }
+} 
