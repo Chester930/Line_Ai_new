@@ -169,3 +169,36 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Project specific
+config/*.json
+config/*.yaml
+config/*.yml
+logs/
+data/
+.vscode/
+.idea/
+*.db
+*.sqlite3
+*.sqlite
+
+# Test artifacts
+.pytest_cache/
+.pytest-*
+test-reports/
+
+# Environment
+.env
+.env.*
+*.env
+
+# Dependencies
+requirements.txt.lock
+poetry.lock
+Pipfile.lock
+
+# Temporary files
+*.swp
+*.swo
+*~
+.DS_Store
