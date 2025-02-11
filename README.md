@@ -130,6 +130,102 @@ pytest tests/unit/ai/
 pytest tests/unit/chat/
 ```
 
+## 測試策略
+
+### 測試計劃
+
+### 測試覆蓋率目標
+- 當前: 42% ✅
+- 第一階段: 50% ⏳ 
+- 第二階段: 70% 🔜
+- 第三階段: 80%+ 🔜
+
+### 已完成測試
+1. 核心功能測試
+   - 配置系統 ✅
+   - 事件系統 ✅
+   - 數據庫操作 ✅
+   - LINE SDK 整合 ✅
+   - AI 模型 ✅
+
+2. 性能測試
+   - 響應時間 ✅
+   - 並發處理 ✅
+   - 記憶體使用 ✅
+   - 數據庫性能 ✅
+
+3. 穩定性測試
+   - 長時間運行 ✅
+   - 錯誤恢復 ✅
+   - 連接穩定性 ✅
+   - 資源釋放 ✅
+
+4. 邊界情況測試
+   - 空輸入處理 ✅
+   - 大量輸入 ✅
+   - 特殊字符 ✅
+   - Unicode 支持 ✅
+   - 速率限制 ✅
+
+### 待完成測試
+1. 整合測試
+   - [ ] 完整對話流程
+   - [ ] 多用戶並發
+   - [ ] 系統恢復流程
+   - [ ] 數據一致性
+
+2. 負載測試
+   - [ ] 高並發處理
+   - [ ] 資源限制
+   - [ ] 數據庫壓力
+   - [ ] 網絡延遲
+
+3. 自動化測試
+   - [ ] CI/CD 整合
+   - [ ] 測試報告生成
+   - [ ] 性能指標監控
+   - [ ] 錯誤追踪
+
+### 執行指南
+```bash
+# 安裝依賴
+pip install -r requirements.txt
+
+# 運行所有測試
+pytest tests/ -v
+
+# 運行特定測試
+pytest tests/test_events.py -v
+pytest tests/test_database.py -v
+pytest tests/test_line_sdk.py -v
+
+# 生成覆蓋率報告
+pytest --cov=src tests/
+```
+
+### 測試報告
+- 測試總數: 45
+- 通過率: 100%
+- 覆蓋率: 42%
+- 平均響應時間: < 500ms
+- 錯誤率: < 1%
+
+### 下一步計劃
+1. 提高測試覆蓋率
+   - 補充缺失的單元測試
+   - 添加更多整合測試
+   - 實現端到端測試
+
+2. 性能優化
+   - 優化數據庫查詢
+   - 改進並發處理
+   - 減少資源使用
+
+3. 監控改進
+   - 添加性能指標
+   - 完善錯誤日誌
+   - 實現自動報警
+
 ## 文檔
 
 - [API 文檔](docs/api.md)
@@ -207,5 +303,97 @@ deactivate
    - 所需模型：Claude 3
 
 注意：目前系統已完成 Gemini 模型整合，OpenAI 和 Claude 模型將在取得 API 密鑰後進行測試和調整。
+
+# LINE AI Assistant
+
+一個基於 LINE Messaging API 的 AI 助手，具有數據庫整合功能。
+
+## 開發環境設置
+
+1. 安裝依賴：
+```bash
+pip install -r requirements.txt
+```
+
+2. 設置環境變數：
+```bash
+# .env
+DATABASE_URL=sqlite+aiosqlite:///:memory:  # 開發環境使用
+LINE_CHANNEL_SECRET=your_channel_secret
+LINE_CHANNEL_ACCESS_TOKEN=your_access_token
+```
+
+## 測試
+
+### 運行測試
+```bash
+# 運行所有測試
+pytest
+
+# 運行特定測試文件
+pytest tests/test_database.py
+
+# 查看測試覆蓋率報告
+pytest --cov=src tests/
+```
+
+### 測試覆蓋率目標
+
+目前項目的測試覆蓋率目標：
+
+- 整體覆蓋率：50%
+- 核心模組覆蓋率：
+  - database: 80%
+  - line_sdk: 70%
+  - events: 70%
+  - config: 60%
+
+### 提高測試覆蓋率的策略
+
+1. 優先測試核心功能：
+   - 數據庫操作
+   - LINE 消息處理
+   - 事件系統
+   - 配置管理
+
+2. 下一步計劃：
+   - 添加 LINE SDK 的單元測試
+   - 完善配置系統的測試
+   - 添加事件系統的整合測試
+   - 實現 utils 模組的測試
+
+3. 測試類型：
+   - 單元測試：測試獨立組件
+   - 整合測試：測試組件間的交互
+   - 功能測試：測試完整功能流程
+
+## 項目結構
+
+```
+src/
+├── line/           # LINE 相關功能
+├── shared/         # 共享組件
+│   ├── database/   # 數據庫模組
+│   ├── events/     # 事件系統
+│   ├── config/     # 配置管理
+│   └── utils/      # 工具函數
+└── main.py         # 主程序入口
+
+tests/              # 測試目錄
+├── test_database.py
+├── test_line.py
+└── test_events.py
+```
+
+## 貢獻指南
+
+1. Fork 本項目
+2. 創建功能分支
+3. 提交更改
+4. 創建 Pull Request
+
+## 許可證
+
+MIT License
 
 

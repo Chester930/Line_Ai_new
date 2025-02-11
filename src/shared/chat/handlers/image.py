@@ -23,11 +23,12 @@ class ImageMessageHandler(BaseMessageHandler):
         """預處理圖片消息"""
         if message.media_url:
             try:
-                # 下載圖片
                 async with aiohttp.ClientSession() as session:
                     async with session.get(message.media_url) as response:
                         if response.status == 200:
                             message.content = await response.read()
+                        else:
+                            raise ValueError(f"下載圖片失敗: HTTP {response.status}")
             except Exception as e:
                 logger.error(f"下載圖片失敗: {str(e)}")
                 raise
